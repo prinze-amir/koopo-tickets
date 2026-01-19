@@ -38,6 +38,12 @@ class Ticket_Types_API {
     ]);
 
     register_rest_route('koopo/v1', '/ticket-types/(?P<id>\d+)', [
+      'methods' => 'GET',
+      'callback' => [__CLASS__, 'get_ticket_type'],
+      'permission_callback' => [__CLASS__, 'can_manage'],
+    ]);
+
+    register_rest_route('koopo/v1', '/ticket-types/(?P<id>\d+)', [
       'methods' => 'DELETE',
       'callback' => [__CLASS__, 'delete_ticket_type'],
       'permission_callback' => [__CLASS__, 'can_manage'],
@@ -96,6 +102,16 @@ class Ticket_Types_API {
     [$ok, $event_or_resp] = self::assert_event_access($event_id, $user_id);
     if (!$ok) return $event_or_resp;
 
+    $validation = self::validate_meta([
+      'price' => $price,
+      'capacity' => $capacity,
+      'status' => $status,
+      'visibility' => $visibility,
+      'sales_start' => $sales_start,
+      'sales_end' => $sales_end,
+    ]);
+    if ($validation) return $validation;
+
     $ticket_type_id = wp_insert_post([
       'post_type' => Ticket_Types_CPT::POST_TYPE,
       'post_status' => 'publish',
@@ -138,6 +154,16 @@ class Ticket_Types_API {
       if (!$ok_event) return $event_or_resp;
     }
 
+    $validation = self::validate_meta([
+      'price' => $req->get_param('price'),
+      'capacity' => $req->get_param('capacity'),
+      'status' => $req->get_param('status'),
+      'visibility' => $req->get_param('visibility'),
+      'sales_start' => $req->get_param('sales_start'),
+      'sales_end' => $req->get_param('sales_end'),
+    ]);
+    if ($validation) return $validation;
+
     self::persist_meta($ticket_type_id, [
       'event_id' => $event_id,
       'price' => $req->get_param('price'),
@@ -162,6 +188,14 @@ class Ticket_Types_API {
     return new \WP_REST_Response([
       'deleted_ticket_type_id' => $ticket_type_id,
     ], 200);
+  }
+
+  public static function get_ticket_type(\WP_REST_Request $req) {
+    $ticket_type_id = absint($req['id']);
+    [$ok, $post_or_resp] = self::assert_owner($ticket_type_id);
+    if (!$ok) return $post_or_resp;
+
+    return new \WP_REST_Response(self::format_ticket_type($ticket_type_id), 200);
   }
 
   public static function list_ticket_types(\WP_REST_Request $req) {
@@ -201,6 +235,40 @@ class Ticket_Types_API {
     return new \WP_REST_Response($items, 200);
   }
 
+  private static function validate_meta(array $payload) {
+    if (array_key_exists('price', $payload) && $payload['price'] !== null) {
+      if ((float) $payload['price'] < 0) {
+        return new \WP_REST_Response(['error' => 'price must be zero or more'], 400);
+      }
+    }
+    if (array_key_exists('capacity', $payload) && $payload['capacity'] !== null) {
+      if ((int) $payload['capacity'] < 0) {
+        return new \WP_REST_Response(['error' => 'capacity must be zero or more'], 400);
+      }
+    }
+    if (array_key_exists('status', $payload) && $payload['status'] !== null) {
+      $status = sanitize_text_field((string) $payload['status']);
+      if ($status && !in_array($status, ['active', 'inactive'], true)) {
+        return new \WP_REST_Response(['error' => 'status must be active or inactive'], 400);
+      }
+    }
+    if (array_key_exists('visibility', $payload) && $payload['visibility'] !== null) {
+      $visibility = sanitize_text_field((string) $payload['visibility']);
+      if ($visibility && !in_array($visibility, ['public', 'private'], true)) {
+        return new \WP_REST_Response(['error' => 'visibility must be public or private'], 400);
+      }
+    }
+    if (!empty($payload['sales_start']) && !empty($payload['sales_end'])) {
+      $start = strtotime((string) $payload['sales_start']);
+      $end = strtotime((string) $payload['sales_end']);
+      if ($start && $end && $end < $start) {
+        return new \WP_REST_Response(['error' => 'sales_end must be after sales_start'], 400);
+      }
+    }
+
+    return null;
+  }
+
   private static function persist_meta(int $ticket_type_id, array $payload): void {
     if (array_key_exists('event_id', $payload) && $payload['event_id'] !== null) {
       update_post_meta($ticket_type_id, self::META_EVENT_ID, absint($payload['event_id']));
@@ -231,10 +299,12 @@ class Ticket_Types_API {
   }
 
   private static function format_ticket_type(int $ticket_type_id): array {
+    $event_id = (int) get_post_meta($ticket_type_id, self::META_EVENT_ID, true);
     return [
       'id' => $ticket_type_id,
       'title' => get_the_title($ticket_type_id),
-      'event_id' => (int) get_post_meta($ticket_type_id, self::META_EVENT_ID, true),
+      'event_id' => $event_id,
+      'event_title' => $event_id ? get_the_title($event_id) : '',
       'price' => (float) get_post_meta($ticket_type_id, self::META_PRICE, true),
       'capacity' => (int) get_post_meta($ticket_type_id, self::META_CAPACITY, true),
       'status' => (string) get_post_meta($ticket_type_id, self::META_STATUS, true),
