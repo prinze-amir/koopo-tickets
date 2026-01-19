@@ -68,7 +68,7 @@
     var $body = $('#koopo-ticket-types-body');
     if (!$body.length) return;
     if (!items.length) {
-      $body.html('<tr><td colspan="10">No ticket types yet.</td></tr>');
+      $body.html('<tr><td colspan="11">No ticket types yet.</td></tr>');
       return;
     }
 
@@ -84,6 +84,7 @@
         '<td>' + fmtSalesWindow(item.sales_start, item.sales_end) + '</td>' +
         '<td>' + (item.sku || '—') + '</td>' +
         '<td>' + (item.product_id ? ('#' + item.product_id) : '—') + '</td>' +
+        '<td>' + (item.variation_id ? ('#' + item.variation_id) : '—') + '</td>' +
         '<td>' +
           '<button class="button koopo-edit-ticket" data-id="' + item.id + '">Edit</button> ' +
           '<button class="button koopo-delete-ticket" data-id="' + item.id + '">Delete</button>' +

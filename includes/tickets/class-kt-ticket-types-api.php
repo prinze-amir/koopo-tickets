@@ -14,6 +14,7 @@ class Ticket_Types_API {
   const META_VISIBILITY = '_koopo_ticket_visibility';
   const META_SKU        = '_koopo_ticket_sku';
   const META_PRODUCT_ID = '_koopo_wc_product_id';
+  const META_VARIATION_ID = '_koopo_wc_variation_id';
 
   public static function init() {
     add_action('rest_api_init', [__CLASS__, 'routes']);
@@ -319,6 +320,7 @@ class Ticket_Types_API {
       'sales_end' => (string) get_post_meta($ticket_type_id, self::META_SALES_END, true),
       'sku' => (string) get_post_meta($ticket_type_id, self::META_SKU, true),
       'product_id' => (int) get_post_meta($ticket_type_id, self::META_PRODUCT_ID, true),
+      'variation_id' => (int) get_post_meta($ticket_type_id, self::META_VARIATION_ID, true),
       'author' => (int) get_post_field('post_author', $ticket_type_id),
     ];
   }

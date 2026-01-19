@@ -107,11 +107,12 @@ defined('ABSPATH') || exit;
             <th><?php echo esc_html__('Sales Window', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('SKU', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Product', 'koopo-tickets'); ?></th>
+            <th><?php echo esc_html__('Variation', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Actions', 'koopo-tickets'); ?></th>
           </tr>
         </thead>
         <tbody id="koopo-ticket-types-body">
-          <tr><td colspan="10"><?php echo esc_html__('Loading...', 'koopo-tickets'); ?></td></tr>
+          <tr><td colspan="11"><?php echo esc_html__('Loading...', 'koopo-tickets'); ?></td></tr>
         </tbody>
       </table>
     </div>
