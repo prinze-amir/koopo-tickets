@@ -4,6 +4,9 @@ defined('ABSPATH') || exit;
 
 ?>
 <div class="dokan-dashboard-wrap">
+  <?php
+            do_action( 'dokan_dashboard_content_before' );
+    ?>
   <div class="dokan-dashboard-content">
     <h2><?php echo esc_html__('Ticket Types', 'koopo-tickets'); ?></h2>
     <p class="koopo-tickets-note"><?php echo esc_html__('Create ticket types for your events. These are stored as private records and later linked to WooCommerce products.', 'koopo-tickets'); ?></p>
