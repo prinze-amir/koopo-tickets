@@ -37,13 +37,22 @@ final class Koopo_Tickets {
     if (!class_exists('WooCommerce')) return;
 
     require_once __DIR__ . '/includes/core/class-kt-db.php';
+    require_once __DIR__ . '/includes/core/class-kt-access.php';
     require_once __DIR__ . '/includes/core/class-kt-logger.php';
     require_once __DIR__ . '/includes/settings/class-kt-settings.php';
     require_once __DIR__ . '/includes/admin/class-kt-admin-settings.php';
+    require_once __DIR__ . '/includes/tickets/class-kt-ticket-types-cpt.php';
+    require_once __DIR__ . '/includes/tickets/class-kt-ticket-types-api.php';
+    require_once __DIR__ . '/includes/vendor/class-kt-vendor-events-api.php';
+    require_once __DIR__ . '/includes/dokan/class-kt-dokan-dashboard.php';
 
     Koopo_Tickets\DB::maybe_upgrade();
     Koopo_Tickets\Settings::init();
     Koopo_Tickets\Admin_Settings::init();
+    Koopo_Tickets\Ticket_Types_CPT::init();
+    Koopo_Tickets\Ticket_Types_API::init();
+    Koopo_Tickets\Vendor_Events_API::init();
+    Koopo_Tickets\Dokan_Dashboard::init();
   }
 }
 
