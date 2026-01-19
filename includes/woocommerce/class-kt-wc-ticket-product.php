@@ -82,6 +82,26 @@ class WC_Ticket_Product {
         wp_trash_post($variation_id);
       }
     }
+
+    $parent_id = (int) get_post_meta($ticket_type_id, self::META_TICKET_PRODUCT_ID, true);
+    if (!$parent_id) return;
+
+    $parent = wc_get_product($parent_id);
+    if (!$parent || !($parent instanceof \WC_Product_Variable)) return;
+
+    $remaining = array_filter($parent->get_children(), function ($child_id) use ($variation_id) {
+      if ($child_id === $variation_id) return false;
+      $child = wc_get_product($child_id);
+      return $child && $child->get_status() !== 'trash';
+    });
+
+    if (empty($remaining)) {
+      wp_trash_post($parent_id);
+      $event_id = (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_EVENT_ID, true);
+      if ($event_id) {
+        delete_post_meta($event_id, self::META_EVENT_PRODUCT_ID);
+      }
+    }
   }
 
   private static function create_parent_product(int $event_id): ?\WC_Product_Variable {
@@ -142,11 +162,11 @@ class WC_Ticket_Product {
     return [self::variation_attribute_key() => $ticket_name];
   }
 
-  private static function parent_attribute_key(): string {
+  public static function parent_attribute_key(): string {
     return sanitize_title(self::ATTRIBUTE_NAME);
   }
 
-  private static function variation_attribute_key(): string {
+  public static function variation_attribute_key(): string {
     return 'attribute_' . self::parent_attribute_key();
   }
 }

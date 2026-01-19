@@ -10,6 +10,7 @@ class Ticket_Types_API {
   const META_CAPACITY   = '_koopo_ticket_capacity';
   const META_SALES_START = '_koopo_ticket_sales_start';
   const META_SALES_END   = '_koopo_ticket_sales_end';
+  const META_SALES_MODE  = '_koopo_ticket_sales_mode';
   const META_STATUS     = '_koopo_ticket_status';
   const META_VISIBILITY = '_koopo_ticket_visibility';
   const META_SKU        = '_koopo_ticket_sku';
@@ -95,6 +96,7 @@ class Ticket_Types_API {
     $capacity  = $req->get_param('capacity');
     $status    = sanitize_text_field((string) $req->get_param('status'));
     $visibility = sanitize_text_field((string) $req->get_param('visibility'));
+    $sales_mode = sanitize_text_field((string) $req->get_param('sales_mode'));
     $sales_start = sanitize_text_field((string) $req->get_param('sales_start'));
     $sales_end = sanitize_text_field((string) $req->get_param('sales_end'));
     $sku = sanitize_text_field((string) $req->get_param('sku'));
@@ -109,6 +111,7 @@ class Ticket_Types_API {
       'capacity' => $capacity,
       'status' => $status,
       'visibility' => $visibility,
+      'sales_mode' => $sales_mode,
       'sales_start' => $sales_start,
       'sales_end' => $sales_end,
     ]);
@@ -163,6 +166,7 @@ class Ticket_Types_API {
       'capacity' => $req->get_param('capacity'),
       'status' => $req->get_param('status'),
       'visibility' => $req->get_param('visibility'),
+      'sales_mode' => $req->get_param('sales_mode'),
       'sales_start' => $req->get_param('sales_start'),
       'sales_end' => $req->get_param('sales_end'),
     ]);
@@ -174,6 +178,7 @@ class Ticket_Types_API {
       'capacity' => $req->get_param('capacity'),
       'status' => $req->get_param('status'),
       'visibility' => $req->get_param('visibility'),
+      'sales_mode' => $req->get_param('sales_mode'),
       'sales_start' => $req->get_param('sales_start'),
       'sales_end' => $req->get_param('sales_end'),
       'sku' => $req->get_param('sku'),
@@ -265,6 +270,17 @@ class Ticket_Types_API {
         return new \WP_REST_Response(['error' => 'visibility must be public or private'], 400);
       }
     }
+    if (array_key_exists('sales_mode', $payload) && $payload['sales_mode'] !== null) {
+      $mode = sanitize_text_field((string) $payload['sales_mode']);
+      if (!in_array($mode, ['event_start', 'event_end', 'custom'], true)) {
+        return new \WP_REST_Response(['error' => 'sales_mode must be event_start, event_end, or custom'], 400);
+      }
+      if ($mode === 'custom') {
+        if (empty($payload['sales_start']) || empty($payload['sales_end'])) {
+          return new \WP_REST_Response(['error' => 'sales_start and sales_end are required for custom mode'], 400);
+        }
+      }
+    }
     if (!empty($payload['sales_start']) && !empty($payload['sales_end'])) {
       $start = strtotime((string) $payload['sales_start']);
       $end = strtotime((string) $payload['sales_end']);
@@ -300,6 +316,17 @@ class Ticket_Types_API {
     if (array_key_exists('sales_end', $payload) && $payload['sales_end'] !== null) {
       update_post_meta($ticket_type_id, self::META_SALES_END, sanitize_text_field((string) $payload['sales_end']));
     }
+    if (array_key_exists('sales_mode', $payload) && $payload['sales_mode'] !== null) {
+      $mode = sanitize_text_field((string) $payload['sales_mode']);
+      if (!in_array($mode, ['event_start', 'event_end', 'custom'], true)) {
+        $mode = 'event_start';
+      }
+      update_post_meta($ticket_type_id, self::META_SALES_MODE, $mode);
+      if ($mode !== 'custom') {
+        delete_post_meta($ticket_type_id, self::META_SALES_START);
+        delete_post_meta($ticket_type_id, self::META_SALES_END);
+      }
+    }
     if (array_key_exists('sku', $payload) && $payload['sku'] !== null) {
       update_post_meta($ticket_type_id, self::META_SKU, sanitize_text_field((string) $payload['sku']));
     }
@@ -316,6 +343,7 @@ class Ticket_Types_API {
       'capacity' => (int) get_post_meta($ticket_type_id, self::META_CAPACITY, true),
       'status' => (string) get_post_meta($ticket_type_id, self::META_STATUS, true),
       'visibility' => (string) get_post_meta($ticket_type_id, self::META_VISIBILITY, true),
+      'sales_mode' => (string) get_post_meta($ticket_type_id, self::META_SALES_MODE, true),
       'sales_start' => (string) get_post_meta($ticket_type_id, self::META_SALES_START, true),
       'sales_end' => (string) get_post_meta($ticket_type_id, self::META_SALES_END, true),
       'sku' => (string) get_post_meta($ticket_type_id, self::META_SKU, true),

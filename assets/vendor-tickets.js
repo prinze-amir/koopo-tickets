@@ -43,6 +43,12 @@
     return start || end;
   }
 
+  function fmtSalesRule(mode, start, end) {
+    if (mode === 'event_end') return 'Until event ends';
+    if (mode === 'custom') return 'Custom: ' + fmtSalesWindow(start, end);
+    return 'Until event starts';
+  }
+
   function statusBadge(status) {
     var normalized = status || 'active';
     var css = normalized === 'inactive' ? 'koopo-tickets-badge is-inactive' : 'koopo-tickets-badge';
@@ -81,7 +87,7 @@
         '<td>' + (item.capacity || '—') + '</td>' +
         '<td>' + statusBadge(item.status) + '</td>' +
         '<td>' + (item.visibility || 'public') + '</td>' +
-        '<td>' + fmtSalesWindow(item.sales_start, item.sales_end) + '</td>' +
+        '<td>' + fmtSalesRule(item.sales_mode, item.sales_start, item.sales_end) + '</td>' +
         '<td>' + (item.sku || '—') + '</td>' +
         '<td>' + (item.product_id ? ('#' + item.product_id) : '—') + '</td>' +
         '<td>' + (item.variation_id ? ('#' + item.variation_id) : '—') + '</td>' +
@@ -133,6 +139,7 @@
         capacity: parseInt($('#koopo-ticket-capacity').val(), 10) || 0,
         status: $('#koopo-ticket-status').val(),
         visibility: $('#koopo-ticket-visibility').val(),
+        sales_mode: $('#koopo-ticket-sales-mode').val(),
         sales_start: $('#koopo-ticket-sales-start').val(),
         sales_end: $('#koopo-ticket-sales-end').val(),
         sku: $('#koopo-ticket-sku').val()
@@ -144,6 +151,10 @@
       }
       if (!payload.event_id) {
         showNotice('error', 'Event is required.');
+        return;
+      }
+      if (payload.sales_mode === 'custom' && (!payload.sales_start || !payload.sales_end)) {
+        showNotice('error', 'Sales start and end are required for custom mode.');
         return;
       }
       if (payload.price < 0 || payload.capacity < 0) {
@@ -159,6 +170,7 @@
         $('#koopo-ticket-id').val('');
         $('#koopo-ticket-submit').text('Create Ticket Type');
         $('#koopo-ticket-cancel').hide();
+        toggleCustomDates();
         showNotice('success', id ? 'Ticket type updated.' : 'Ticket type created.');
         loadTickets();
       }).fail(function (xhr) {
@@ -197,9 +209,11 @@
         $('#koopo-ticket-visibility').val(item.visibility || 'public');
         $('#koopo-ticket-sales-start').val(item.sales_start || '');
         $('#koopo-ticket-sales-end').val(item.sales_end || '');
+        $('#koopo-ticket-sales-mode').val(item.sales_mode || 'event_start');
         $('#koopo-ticket-sku').val(item.sku || '');
         $('#koopo-ticket-submit').text('Update Ticket Type');
         $('#koopo-ticket-cancel').show();
+        toggleCustomDates();
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
     });
@@ -211,6 +225,11 @@
       $('#koopo-ticket-submit').text('Create Ticket Type');
       $('#koopo-ticket-cancel').hide();
     });
+  }
+
+  function toggleCustomDates() {
+    var mode = $('#koopo-ticket-sales-mode').val();
+    $('.koopo-ticket-custom-dates').toggle(mode === 'custom');
   }
 
   function bindFilters() {
@@ -229,5 +248,7 @@
     bindDelete();
     bindEdit();
     bindFilters();
+    $('#koopo-ticket-sales-mode').on('change', toggleCustomDates);
+    toggleCustomDates();
   });
 })(jQuery);

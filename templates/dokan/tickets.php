@@ -48,10 +48,18 @@ defined('ABSPATH') || exit;
             </select>
           </div>
           <div>
+            <label for="koopo-ticket-sales-mode"><?php echo esc_html__('Sales Rule', 'koopo-tickets'); ?></label>
+            <select id="koopo-ticket-sales-mode">
+              <option value="event_start"><?php echo esc_html__('Sell until event starts', 'koopo-tickets'); ?></option>
+              <option value="event_end"><?php echo esc_html__('Sell until event ends', 'koopo-tickets'); ?></option>
+              <option value="custom"><?php echo esc_html__('Set start and end dates', 'koopo-tickets'); ?></option>
+            </select>
+          </div>
+          <div class="koopo-ticket-custom-dates" style="display:none;">
             <label for="koopo-ticket-sales-start"><?php echo esc_html__('Sales Start', 'koopo-tickets'); ?></label>
             <input id="koopo-ticket-sales-start" type="date">
           </div>
-          <div>
+          <div class="koopo-ticket-custom-dates" style="display:none;">
             <label for="koopo-ticket-sales-end"><?php echo esc_html__('Sales End', 'koopo-tickets'); ?></label>
             <input id="koopo-ticket-sales-end" type="date">
           </div>
@@ -104,7 +112,7 @@ defined('ABSPATH') || exit;
             <th><?php echo esc_html__('Capacity', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Status', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Visibility', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('Sales Window', 'koopo-tickets'); ?></th>
+            <th><?php echo esc_html__('Sales Rule', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('SKU', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Product', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Variation', 'koopo-tickets'); ?></th>

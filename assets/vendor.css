@@ -26,6 +26,10 @@
   border-radius: 6px;
 }
 
+.koopo-ticket-custom-dates {
+  transition: opacity 0.2s ease;
+}
+
 .koopo-tickets-actions {
   display: flex;
   gap: 10px;
