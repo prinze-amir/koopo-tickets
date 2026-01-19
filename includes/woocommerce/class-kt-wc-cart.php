@@ -23,6 +23,19 @@ class WC_Cart {
       return false;
     }
 
+    $ticket_type_id = absint($_POST['koopo_ticket_type_id'] ?? 0);
+    $max_per_order = $ticket_type_id ? (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_MAX_PER_ORDER, true) : 0;
+    if ($max_per_order && $quantity > $max_per_order) {
+      wc_add_notice(__('Selected quantity exceeds the ticket limit.', 'koopo-tickets'), 'error');
+      return false;
+    }
+
+    $global_max = (int) Settings::get('max_tickets_per_order');
+    if ($global_max && $quantity > $global_max) {
+      wc_add_notice(__('Selected quantity exceeds the order limit.', 'koopo-tickets'), 'error');
+      return false;
+    }
+
     return $passed;
   }
 
@@ -38,6 +51,7 @@ class WC_Cart {
     $cart_item_data['koopo_ticket_type_id'] = absint($_POST['koopo_ticket_type_id'] ?? 0);
     $cart_item_data['koopo_ticket_schedule_id'] = absint($_POST['koopo_ticket_schedule_id'] ?? 0);
     $cart_item_data['koopo_ticket_schedule_label'] = sanitize_text_field(wp_unslash($_POST['koopo_ticket_schedule_label'] ?? ''));
+    $cart_item_data['koopo_ticket_guests'] = self::sanitize_guests($_POST['koopo_ticket_guests'] ?? '');
 
     $cart_item_data['koopo_ticket_key'] = wp_generate_password(12, false);
     $cart_item_data['unique_key'] = md5($cart_item_data['koopo_ticket_key'] . microtime(true));
@@ -70,6 +84,12 @@ class WC_Cart {
         'value' => $cart_item['koopo_ticket_contact_phone'],
       ];
     }
+    if (!empty($cart_item['koopo_ticket_guests']) && is_array($cart_item['koopo_ticket_guests'])) {
+      $item_data[] = [
+        'name' => __('Guests', 'koopo-tickets'),
+        'value' => (string) count($cart_item['koopo_ticket_guests']),
+      ];
+    }
 
     return $item_data;
   }
@@ -90,5 +110,31 @@ class WC_Cart {
         $item->add_meta_data($label, $values[$key], true);
       }
     }
+
+    if (!empty($values['koopo_ticket_guests'])) {
+      $item->add_meta_data('_koopo_ticket_guests', wp_json_encode($values['koopo_ticket_guests']), true);
+    }
+  }
+
+  private static function sanitize_guests($raw): array {
+    if (empty($raw)) return [];
+    if (is_array($raw)) return $raw;
+
+    $decoded = json_decode(wp_unslash($raw), true);
+    if (!is_array($decoded)) return [];
+
+    $out = [];
+    foreach ($decoded as $guest) {
+      if (!is_array($guest)) continue;
+      $out[] = [
+        'name' => sanitize_text_field($guest['name'] ?? ''),
+        'email' => sanitize_email($guest['email'] ?? ''),
+        'phone' => sanitize_text_field($guest['phone'] ?? ''),
+        'ticket_type_id' => absint($guest['ticket_type_id'] ?? 0),
+        'ticket_name' => sanitize_text_field($guest['ticket_name'] ?? ''),
+      ];
+    }
+
+    return $out;
   }
 }

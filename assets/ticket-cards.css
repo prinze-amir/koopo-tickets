@@ -1,16 +1,24 @@
-.koopo-ticket-cards {
+body.koopo-ticket--modal-open {
+  overflow: hidden;
+}
+
+.koopo-ticket-section {
+  margin: 24px 0;
+}
+
+.koopo-ticket-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
-  margin: 20px 0;
+  margin: 16px 0;
 }
 
 .koopo-ticket-card {
   border: 1px solid #e4e4e4;
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 16px;
   background: #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
 }
 
 .koopo-ticket-card h4 {
@@ -35,88 +43,171 @@
   color: #666;
 }
 
-.koopo-ticket-card button {
-  margin-top: 10px;
-}
-
 .koopo-ticket-card.is-soldout {
   opacity: 0.6;
 }
 
-.koopo-ticket-card.is-soldout button {
-  cursor: not-allowed;
+.koopo-ticket-cta {
+  margin-top: 12px;
 }
 
-.koopo-ticket-modal-open {
-  overflow: hidden;
-}
-
-.koopo-ticket-modal {
+.koopo-ticket__overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
   display: none;
   align-items: center;
   justify-content: center;
   padding: 16px;
-  z-index: 9999;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 999999;
+  overflow-y: auto;
 }
 
-.koopo-ticket-modal.is-open {
+.koopo-ticket__overlay.is-open {
   display: flex;
 }
 
-.koopo-ticket-modal-content {
+.koopo-ticket__modal {
+  width: 100%;
+  max-width: 720px;
+  overflow-y: auto;
   background: #fff;
   border-radius: 16px;
-  max-width: 520px;
-  width: 100%;
-  padding: 18px;
+  padding: 24px;
   position: relative;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  transform: translateY(12px);
+  opacity: 0;
+  transition: transform 200ms ease, opacity 200ms ease;
+  margin: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 
-.koopo-ticket-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+.koopo-ticket__overlay.is-open .koopo-ticket__modal {
+  transform: translateY(0);
+  opacity: 1;
 }
 
-.koopo-ticket-modal-header h3 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.koopo-ticket-modal-close {
-  border: none;
+.koopo-ticket__close {
+  position: absolute;
+  right: 16px;
+  top: 12px;
+  font-size: 2rem;
   background: transparent;
-  font-size: 20px;
+  border: none;
   cursor: pointer;
+  color: #666;
+  z-index: 10;
+  line-height: 1;
+  padding: 4px 8px;
 }
 
-.koopo-ticket-modal form label {
+.koopo-ticket__header {
+  margin-bottom: 20px;
+}
+
+.koopo-ticket__title {
+  margin: 0 0 12px 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+  letter-spacing: -0.5px;
+}
+
+.koopo-ticket__steps {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.koopo-ticket__step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  opacity: 0.4;
+  transition: opacity 200ms ease;
+}
+
+.koopo-ticket__step--active,
+.koopo-ticket__step--completed {
+  opacity: 1;
+}
+
+.koopo-ticket__step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  color: #666;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.koopo-ticket__step--active .koopo-ticket__step-num {
+  background: linear-gradient(135deg, #FFA500 0%, #FF8C00 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(255, 165, 0, 0.3);
+}
+
+.koopo-ticket__step-label {
+  font-size: 14px;
+  color: #444;
+}
+
+.koopo-ticket__panel {
+  display: none;
+  margin-top: 20px;
+}
+
+.koopo-ticket__panel.is-active {
+  display: block;
+}
+
+.koopo-ticket__field label {
   display: block;
   font-weight: 600;
-  margin: 10px 0 6px;
+  margin: 12px 0 6px;
 }
 
-.koopo-ticket-modal form input,
-.koopo-ticket-modal form select {
+.koopo-ticket__field input,
+.koopo-ticket__field select {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid #d8d8d8;
   border-radius: 8px;
 }
 
-.koopo-ticket-modal-footer {
-  margin-top: 14px;
-  display: flex;
+.koopo-ticket__list {
+  display: grid;
+  gap: 12px;
+}
+
+.koopo-ticket__item {
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 1fr 120px;
   gap: 10px;
   align-items: center;
 }
 
-.koopo-ticket-modal-notice {
+.koopo-ticket__item h5 {
+  margin: 0 0 4px;
+}
+
+.koopo-ticket__qty input {
+  width: 100%;
+}
+
+.koopo-ticket__notice {
   display: none;
   background: #fff3f3;
   color: #7a1e1e;
@@ -124,4 +215,57 @@
   padding: 8px 10px;
   border-radius: 8px;
   margin-bottom: 10px;
+}
+
+.koopo-ticket__footer {
+  margin-top: 18px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.koopo-ticket__summary {
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fafafa;
+}
+
+.koopo-ticket__summary ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.koopo-ticket__summary li {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px dashed #e0e0e0;
+}
+
+.koopo-ticket__summary li:last-child {
+  border-bottom: none;
+}
+
+.koopo-ticket__summary-total {
+  font-weight: 700;
+}
+
+.koopo-ticket__guest-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.koopo-ticket__guest-card {
+  border: 1px solid #e7e7e7;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+}
+
+.koopo-ticket__guest-card h6 {
+  margin: 0 0 8px;
+  font-size: 14px;
 }

@@ -74,7 +74,7 @@
     var $body = $('#koopo-ticket-types-body');
     if (!$body.length) return;
     if (!items.length) {
-      $body.html('<tr><td colspan="11">No ticket types yet.</td></tr>');
+      $body.html('<tr><td colspan="12">No ticket types yet.</td></tr>');
       return;
     }
 
@@ -91,6 +91,7 @@
         '<td>' + (item.sku || '—') + '</td>' +
         '<td>' + (item.product_id ? ('#' + item.product_id) : '—') + '</td>' +
         '<td>' + (item.variation_id ? ('#' + item.variation_id) : '—') + '</td>' +
+        '<td>' + (item.max_per_order ? item.max_per_order : '—') + '</td>' +
         '<td>' +
           '<button class="button koopo-edit-ticket" data-id="' + item.id + '">Edit</button> ' +
           '<button class="button koopo-delete-ticket" data-id="' + item.id + '">Delete</button>' +
@@ -142,7 +143,8 @@
         sales_mode: $('#koopo-ticket-sales-mode').val(),
         sales_start: $('#koopo-ticket-sales-start').val(),
         sales_end: $('#koopo-ticket-sales-end').val(),
-        sku: $('#koopo-ticket-sku').val()
+        sku: $('#koopo-ticket-sku').val(),
+        max_per_order: parseInt($('#koopo-ticket-max').val(), 10) || 0
       };
 
       if (!payload.title) {
@@ -211,6 +213,7 @@
         $('#koopo-ticket-sales-end').val(item.sales_end || '');
         $('#koopo-ticket-sales-mode').val(item.sales_mode || 'event_start');
         $('#koopo-ticket-sku').val(item.sku || '');
+        $('#koopo-ticket-max').val(item.max_per_order || '');
         $('#koopo-ticket-submit').text('Update Ticket Type');
         $('#koopo-ticket-cancel').show();
         toggleCustomDates();

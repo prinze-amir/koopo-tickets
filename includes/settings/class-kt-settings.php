@@ -17,6 +17,7 @@ class Settings {
     return [
       'debug' => false,
       'event_cpt' => 'gd_event',
+      'max_tickets_per_order' => 0,
     ];
   }
 
@@ -58,6 +59,14 @@ class Settings {
       self::SETTINGS_PAGE,
       'koopo_tickets_main'
     );
+
+    add_settings_field(
+      'max_tickets_per_order',
+      'Max tickets per order',
+      [__CLASS__, 'render_max_tickets_field'],
+      self::SETTINGS_PAGE,
+      'koopo_tickets_main'
+    );
   }
 
   public static function sanitize($input) {
@@ -66,6 +75,7 @@ class Settings {
     $output = [
       'debug' => !empty($input['debug']),
       'event_cpt' => isset($input['event_cpt']) ? sanitize_key($input['event_cpt']) : $defaults['event_cpt'],
+      'max_tickets_per_order' => isset($input['max_tickets_per_order']) ? absint($input['max_tickets_per_order']) : $defaults['max_tickets_per_order'],
     ];
 
     return $output;
@@ -83,5 +93,12 @@ class Settings {
     $value = isset($options['event_cpt']) ? $options['event_cpt'] : 'gd_event';
 
     echo '<input type="text" class="regular-text" name="' . esc_attr(self::OPTION_KEY) . '[event_cpt]" value="' . esc_attr($value) . '">';
+  }
+
+  public static function render_max_tickets_field() {
+    $options = self::get();
+    $value = isset($options['max_tickets_per_order']) ? (int) $options['max_tickets_per_order'] : 0;
+
+    echo '<input type="number" min="0" class="small-text" name="' . esc_attr(self::OPTION_KEY) . '[max_tickets_per_order]" value="' . esc_attr($value) . '"> <span class="description">0 = unlimited</span>';
   }
 }

@@ -67,6 +67,10 @@ defined('ABSPATH') || exit;
             <label for="koopo-ticket-sku"><?php echo esc_html__('SKU', 'koopo-tickets'); ?></label>
             <input id="koopo-ticket-sku" type="text">
           </div>
+          <div>
+            <label for="koopo-ticket-max"><?php echo esc_html__('Max per order', 'koopo-tickets'); ?></label>
+            <input id="koopo-ticket-max" type="number" min="0" step="1" placeholder="<?php echo esc_attr__('0 = unlimited', 'koopo-tickets'); ?>">
+          </div>
         </div>
         <div class="koopo-tickets-actions">
           <button type="submit" class="button button-primary" id="koopo-ticket-submit"><?php echo esc_html__('Create Ticket Type', 'koopo-tickets'); ?></button>
@@ -116,11 +120,12 @@ defined('ABSPATH') || exit;
             <th><?php echo esc_html__('SKU', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Product', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Variation', 'koopo-tickets'); ?></th>
+            <th><?php echo esc_html__('Max/Order', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Actions', 'koopo-tickets'); ?></th>
           </tr>
         </thead>
         <tbody id="koopo-ticket-types-body">
-          <tr><td colspan="11"><?php echo esc_html__('Loading...', 'koopo-tickets'); ?></td></tr>
+          <tr><td colspan="12"><?php echo esc_html__('Loading...', 'koopo-tickets'); ?></td></tr>
         </tbody>
       </table>
     </div>

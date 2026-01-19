@@ -16,6 +16,7 @@ class Ticket_Types_API {
   const META_SKU        = '_koopo_ticket_sku';
   const META_PRODUCT_ID = '_koopo_wc_product_id';
   const META_VARIATION_ID = '_koopo_wc_variation_id';
+  const META_MAX_PER_ORDER = '_koopo_ticket_max_per_order';
 
   public static function init() {
     add_action('rest_api_init', [__CLASS__, 'routes']);
@@ -100,6 +101,7 @@ class Ticket_Types_API {
     $sales_start = sanitize_text_field((string) $req->get_param('sales_start'));
     $sales_end = sanitize_text_field((string) $req->get_param('sales_end'));
     $sku = sanitize_text_field((string) $req->get_param('sku'));
+    $max_per_order = $req->get_param('max_per_order');
 
     if (!$title) return new \WP_REST_Response(['error' => 'title is required'], 400);
 
@@ -114,6 +116,7 @@ class Ticket_Types_API {
       'sales_mode' => $sales_mode,
       'sales_start' => $sales_start,
       'sales_end' => $sales_end,
+      'max_per_order' => $max_per_order,
     ]);
     if ($validation) return $validation;
 
@@ -134,9 +137,11 @@ class Ticket_Types_API {
       'capacity' => $capacity,
       'status' => $status,
       'visibility' => $visibility,
+      'sales_mode' => $sales_mode,
       'sales_start' => $sales_start,
       'sales_end' => $sales_end,
       'sku' => $sku,
+      'max_per_order' => $max_per_order,
     ]);
 
     WC_Ticket_Product::create_or_update_for_ticket_type($ticket_type_id);
@@ -169,6 +174,7 @@ class Ticket_Types_API {
       'sales_mode' => $req->get_param('sales_mode'),
       'sales_start' => $req->get_param('sales_start'),
       'sales_end' => $req->get_param('sales_end'),
+      'max_per_order' => $req->get_param('max_per_order'),
     ]);
     if ($validation) return $validation;
 
@@ -182,6 +188,7 @@ class Ticket_Types_API {
       'sales_start' => $req->get_param('sales_start'),
       'sales_end' => $req->get_param('sales_end'),
       'sku' => $req->get_param('sku'),
+      'max_per_order' => $req->get_param('max_per_order'),
     ]);
 
     WC_Ticket_Product::create_or_update_for_ticket_type($ticket_type_id);
@@ -258,6 +265,11 @@ class Ticket_Types_API {
         return new \WP_REST_Response(['error' => 'capacity must be zero or more'], 400);
       }
     }
+    if (array_key_exists('max_per_order', $payload) && $payload['max_per_order'] !== null) {
+      if ((int) $payload['max_per_order'] < 0) {
+        return new \WP_REST_Response(['error' => 'max_per_order must be zero or more'], 400);
+      }
+    }
     if (array_key_exists('status', $payload) && $payload['status'] !== null) {
       $status = sanitize_text_field((string) $payload['status']);
       if ($status && !in_array($status, ['active', 'inactive'], true)) {
@@ -316,6 +328,9 @@ class Ticket_Types_API {
     if (array_key_exists('sales_end', $payload) && $payload['sales_end'] !== null) {
       update_post_meta($ticket_type_id, self::META_SALES_END, sanitize_text_field((string) $payload['sales_end']));
     }
+    if (array_key_exists('max_per_order', $payload) && $payload['max_per_order'] !== null) {
+      update_post_meta($ticket_type_id, self::META_MAX_PER_ORDER, absint($payload['max_per_order']));
+    }
     if (array_key_exists('sales_mode', $payload) && $payload['sales_mode'] !== null) {
       $mode = sanitize_text_field((string) $payload['sales_mode']);
       if (!in_array($mode, ['event_start', 'event_end', 'custom'], true)) {
@@ -347,6 +362,7 @@ class Ticket_Types_API {
       'sales_start' => (string) get_post_meta($ticket_type_id, self::META_SALES_START, true),
       'sales_end' => (string) get_post_meta($ticket_type_id, self::META_SALES_END, true),
       'sku' => (string) get_post_meta($ticket_type_id, self::META_SKU, true),
+      'max_per_order' => (int) get_post_meta($ticket_type_id, self::META_MAX_PER_ORDER, true),
       'product_id' => (int) get_post_meta($ticket_type_id, self::META_PRODUCT_ID, true),
       'variation_id' => (int) get_post_meta($ticket_type_id, self::META_VARIATION_ID, true),
       'author' => (int) get_post_field('post_author', $ticket_type_id),
