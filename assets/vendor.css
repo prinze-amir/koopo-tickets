@@ -33,6 +33,27 @@
   margin-top: 12px;
 }
 
+.koopo-tickets-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.koopo-tickets-filters label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.koopo-tickets-filters input,
+.koopo-tickets-filters select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d6d6d6;
+  border-radius: 6px;
+}
+
 .koopo-tickets-table {
   width: 100%;
   border-collapse: collapse;

@@ -69,6 +69,32 @@ defined('ABSPATH') || exit;
 
     <div class="koopo-tickets-card">
       <h3><?php echo esc_html__('Existing Ticket Types', 'koopo-tickets'); ?></h3>
+      <div class="koopo-tickets-filters">
+        <div>
+          <label for="koopo-ticket-filter-search"><?php echo esc_html__('Search', 'koopo-tickets'); ?></label>
+          <input id="koopo-ticket-filter-search" type="text" placeholder="<?php echo esc_attr__('Ticket name...', 'koopo-tickets'); ?>">
+        </div>
+        <div>
+          <label for="koopo-ticket-filter-event"><?php echo esc_html__('Event', 'koopo-tickets'); ?></label>
+          <select id="koopo-ticket-filter-event"></select>
+        </div>
+        <div>
+          <label for="koopo-ticket-filter-status"><?php echo esc_html__('Status', 'koopo-tickets'); ?></label>
+          <select id="koopo-ticket-filter-status">
+            <option value=""><?php echo esc_html__('All', 'koopo-tickets'); ?></option>
+            <option value="active"><?php echo esc_html__('Active', 'koopo-tickets'); ?></option>
+            <option value="inactive"><?php echo esc_html__('Inactive', 'koopo-tickets'); ?></option>
+          </select>
+        </div>
+        <div>
+          <label for="koopo-ticket-filter-visibility"><?php echo esc_html__('Visibility', 'koopo-tickets'); ?></label>
+          <select id="koopo-ticket-filter-visibility">
+            <option value=""><?php echo esc_html__('All', 'koopo-tickets'); ?></option>
+            <option value="public"><?php echo esc_html__('Public', 'koopo-tickets'); ?></option>
+            <option value="private"><?php echo esc_html__('Private', 'koopo-tickets'); ?></option>
+          </select>
+        </div>
+      </div>
       <table class="koopo-tickets-table">
         <thead>
           <tr>
@@ -77,11 +103,15 @@ defined('ABSPATH') || exit;
             <th><?php echo esc_html__('Price', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Capacity', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Status', 'koopo-tickets'); ?></th>
+            <th><?php echo esc_html__('Visibility', 'koopo-tickets'); ?></th>
+            <th><?php echo esc_html__('Sales Window', 'koopo-tickets'); ?></th>
+            <th><?php echo esc_html__('SKU', 'koopo-tickets'); ?></th>
+            <th><?php echo esc_html__('Product', 'koopo-tickets'); ?></th>
             <th><?php echo esc_html__('Actions', 'koopo-tickets'); ?></th>
           </tr>
         </thead>
         <tbody id="koopo-ticket-types-body">
-          <tr><td colspan="6"><?php echo esc_html__('Loading...', 'koopo-tickets'); ?></td></tr>
+          <tr><td colspan="10"><?php echo esc_html__('Loading...', 'koopo-tickets'); ?></td></tr>
         </tbody>
       </table>
     </div>

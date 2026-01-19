@@ -35,17 +35,38 @@
     return parseFloat(value).toFixed(2);
   }
 
+  function fmtSalesWindow(start, end) {
+    if (!start && !end) return '—';
+    if (start && end) return start + ' → ' + end;
+    return start || end;
+  }
+
   function statusBadge(status) {
     var normalized = status || 'active';
     var css = normalized === 'inactive' ? 'koopo-tickets-badge is-inactive' : 'koopo-tickets-badge';
     return '<span class="' + css + '">' + normalized + '</span>';
   }
 
+  function applyFilters(items) {
+    var search = ($('#koopo-ticket-filter-search').val() || '').toLowerCase();
+    var eventId = parseInt($('#koopo-ticket-filter-event').val() || 0, 10);
+    var status = $('#koopo-ticket-filter-status').val();
+    var visibility = $('#koopo-ticket-filter-visibility').val();
+
+    return items.filter(function (item) {
+      if (search && item.title.toLowerCase().indexOf(search) === -1) return false;
+      if (eventId && item.event_id !== eventId) return false;
+      if (status && item.status !== status) return false;
+      if (visibility && item.visibility !== visibility) return false;
+      return true;
+    });
+  }
+
   function renderRows(items) {
     var $body = $('#koopo-ticket-types-body');
     if (!$body.length) return;
     if (!items.length) {
-      $body.html('<tr><td colspan="6">No ticket types yet.</td></tr>');
+      $body.html('<tr><td colspan="10">No ticket types yet.</td></tr>');
       return;
     }
 
@@ -57,6 +78,10 @@
         '<td>' + fmtCurrency(item.price) + '</td>' +
         '<td>' + (item.capacity || '—') + '</td>' +
         '<td>' + statusBadge(item.status) + '</td>' +
+        '<td>' + (item.visibility || 'public') + '</td>' +
+        '<td>' + fmtSalesWindow(item.sales_start, item.sales_end) + '</td>' +
+        '<td>' + (item.sku || '—') + '</td>' +
+        '<td>' + (item.product_id ? ('#' + item.product_id) : '—') + '</td>' +
         '<td>' +
           '<button class="button koopo-edit-ticket" data-id="' + item.id + '">Edit</button> ' +
           '<button class="button koopo-delete-ticket" data-id="' + item.id + '">Delete</button>' +
@@ -69,18 +94,27 @@
 
   function loadTickets() {
     request('ticket-types', 'GET').done(function (items) {
-      renderRows(items || []);
+      var filtered = applyFilters(items || []);
+      renderRows(filtered);
     });
   }
 
   function loadEvents() {
     if (!api.events || !api.events.length) return;
     var $select = $('#koopo-ticket-event');
+    var $filter = $('#koopo-ticket-filter-event');
     if (!$select.length) return;
     $select.empty();
     $select.append('<option value="">Select event</option>');
+    if ($filter.length) {
+      $filter.empty();
+      $filter.append('<option value="">All events</option>');
+    }
     api.events.forEach(function (ev) {
       $select.append('<option value="' + ev.id + '">' + ev.title + '</option>');
+      if ($filter.length) {
+        $filter.append('<option value="' + ev.id + '">' + ev.title + '</option>');
+      }
     });
   }
 
@@ -176,11 +210,21 @@
     });
   }
 
+  function bindFilters() {
+    $('#koopo-ticket-filter-search').on('input', function () {
+      loadTickets();
+    });
+    $('#koopo-ticket-filter-event, #koopo-ticket-filter-status, #koopo-ticket-filter-visibility').on('change', function () {
+      loadTickets();
+    });
+  }
+
   $(function () {
     loadEvents();
     loadTickets();
     bindCreate();
     bindDelete();
     bindEdit();
+    bindFilters();
   });
 })(jQuery);

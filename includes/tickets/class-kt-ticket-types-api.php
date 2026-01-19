@@ -13,6 +13,7 @@ class Ticket_Types_API {
   const META_STATUS     = '_koopo_ticket_status';
   const META_VISIBILITY = '_koopo_ticket_visibility';
   const META_SKU        = '_koopo_ticket_sku';
+  const META_PRODUCT_ID = '_koopo_wc_product_id';
 
   public static function init() {
     add_action('rest_api_init', [__CLASS__, 'routes']);
@@ -134,6 +135,8 @@ class Ticket_Types_API {
       'sku' => $sku,
     ]);
 
+    WC_Ticket_Product::create_or_update_for_ticket_type($ticket_type_id);
+
     return new \WP_REST_Response(self::format_ticket_type($ticket_type_id), 201);
   }
 
@@ -175,6 +178,8 @@ class Ticket_Types_API {
       'sku' => $req->get_param('sku'),
     ]);
 
+    WC_Ticket_Product::create_or_update_for_ticket_type($ticket_type_id);
+
     return new \WP_REST_Response(self::format_ticket_type($ticket_type_id), 200);
   }
 
@@ -184,6 +189,7 @@ class Ticket_Types_API {
     if (!$ok) return $post_or_resp;
 
     wp_trash_post($ticket_type_id);
+    WC_Ticket_Product::maybe_trash_for_ticket_type($ticket_type_id);
 
     return new \WP_REST_Response([
       'deleted_ticket_type_id' => $ticket_type_id,
@@ -312,6 +318,7 @@ class Ticket_Types_API {
       'sales_start' => (string) get_post_meta($ticket_type_id, self::META_SALES_START, true),
       'sales_end' => (string) get_post_meta($ticket_type_id, self::META_SALES_END, true),
       'sku' => (string) get_post_meta($ticket_type_id, self::META_SKU, true),
+      'product_id' => (int) get_post_meta($ticket_type_id, self::META_PRODUCT_ID, true),
       'author' => (int) get_post_field('post_author', $ticket_type_id),
     ];
   }
