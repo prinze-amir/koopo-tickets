@@ -5,8 +5,10 @@
   if (!api.rest || !api.nonce) return;
 
   function request(path, method, data) {
+    var base = api.rest.replace(/\/$/, '');
+    var url = base + '/' + path.replace(/^\//, '');
     return $.ajax({
-      url: api.rest + path,
+      url: url,
       method: method || 'GET',
       data: data ? JSON.stringify(data) : null,
       contentType: 'application/json',
