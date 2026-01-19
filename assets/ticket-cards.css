@@ -46,3 +46,82 @@
 .koopo-ticket-card.is-soldout button {
   cursor: not-allowed;
 }
+
+.koopo-ticket-modal-open {
+  overflow: hidden;
+}
+
+.koopo-ticket-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 9999;
+}
+
+.koopo-ticket-modal.is-open {
+  display: flex;
+}
+
+.koopo-ticket-modal-content {
+  background: #fff;
+  border-radius: 16px;
+  max-width: 520px;
+  width: 100%;
+  padding: 18px;
+  position: relative;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+}
+
+.koopo-ticket-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.koopo-ticket-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.koopo-ticket-modal-close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.koopo-ticket-modal form label {
+  display: block;
+  font-weight: 600;
+  margin: 10px 0 6px;
+}
+
+.koopo-ticket-modal form input,
+.koopo-ticket-modal form select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+}
+
+.koopo-ticket-modal-footer {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.koopo-ticket-modal-notice {
+  display: none;
+  background: #fff3f3;
+  color: #7a1e1e;
+  border: 1px solid #e5b2b2;
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
