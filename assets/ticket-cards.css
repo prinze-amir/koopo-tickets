@@ -231,20 +231,26 @@ body.koopo-ticket--modal-open {
   background: #fafafa;
 }
 
-.koopo-ticket__summary ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.koopo-ticket__summary-block {
+  margin-bottom: 12px;
 }
 
-.koopo-ticket__summary li {
+.koopo-ticket__summary-block h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #666;
+}
+
+.koopo-ticket__summary-row {
   display: flex;
   justify-content: space-between;
   padding: 6px 0;
   border-bottom: 1px dashed #e0e0e0;
 }
 
-.koopo-ticket__summary li:last-child {
+.koopo-ticket__summary-row:last-child {
   border-bottom: none;
 }
 

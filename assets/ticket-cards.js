@@ -104,20 +104,35 @@
     var $summary = $modal.find('[data-summary]');
     var currency = (window.KOOPO_TICKETS_FRONTEND && KOOPO_TICKETS_FRONTEND.currency_symbol) ? KOOPO_TICKETS_FRONTEND.currency_symbol : '$';
     var total = 0;
-    var list = '<ul>';
+    var list = '<div class="koopo-ticket__summary-block">';
+    list += '<h4>Tickets</h4>';
 
     selections.forEach(function (item) {
       var line = item.price * item.qty;
       total += line;
-      list += '<li><span>' + item.name + ' x ' + item.qty + '</span><span>' + currency + line.toFixed(2) + '</span></li>';
+      list += '<div class="koopo-ticket__summary-row"><span>' + item.name + ' x ' + item.qty + '</span><span>' + currency + line.toFixed(2) + '</span></div>';
     });
 
-    list += '<li class="koopo-ticket__summary-total"><span>Total</span><span>' + currency + total.toFixed(2) + '</span></li>';
-    list += '</ul>';
+    list += '<div class="koopo-ticket__summary-row koopo-ticket__summary-total"><span>Total</span><span>' + currency + total.toFixed(2) + '</span></div>';
+    list += '</div>';
 
     var scheduleLabel = $modal.find('input[name="koopo_ticket_schedule_label"]').val();
     if (scheduleLabel) {
-      list += '<p><strong>Event Date:</strong> ' + scheduleLabel + '</p>';
+      list += '<div class="koopo-ticket__summary-block"><h4>Event Date</h4><div class="koopo-ticket__summary-row"><span>' + scheduleLabel + '</span></div></div>';
+    }
+
+    var guests = collectGuests($modal);
+    if (guests.length) {
+      list += '<div class="koopo-ticket__summary-block"><h4>Guests</h4>';
+      guests.forEach(function (guest, index) {
+        var parts = [];
+        if (guest.name) parts.push(guest.name);
+        if (guest.email) parts.push(guest.email);
+        if (guest.phone) parts.push(guest.phone);
+        var label = parts.length ? parts.join(' • ') : 'Guest ' + (index + 1);
+        list += '<div class="koopo-ticket__summary-row"><span>' + label + '</span><span>' + (guest.ticket_name || '') + '</span></div>';
+      });
+      list += '</div>';
     }
 
     $summary.html(list);

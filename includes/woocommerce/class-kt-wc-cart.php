@@ -30,10 +30,12 @@ class WC_Cart {
       return false;
     }
 
-    $global_max = (int) Settings::get('max_tickets_per_order');
-    if ($global_max && $quantity > $global_max) {
-      wc_add_notice(__('Selected quantity exceeds the order limit.', 'koopo-tickets'), 'error');
-      return false;
+    if (!$max_per_order) {
+      $global_max = (int) Settings::get('max_tickets_per_order');
+      if ($global_max && $quantity > $global_max) {
+        wc_add_notice(__('Selected quantity exceeds the order limit.', 'koopo-tickets'), 'error');
+        return false;
+      }
     }
 
     return $passed;
