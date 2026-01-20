@@ -62,57 +62,32 @@ class WC_Cart {
   }
 
   public static function display_item_data($item_data, $cart_item) {
-    if (!empty($cart_item['koopo_ticket_schedule_label'])) {
-      $item_data[] = [
-        'name' => __('Event Date', 'koopo-tickets'),
-        'value' => $cart_item['koopo_ticket_schedule_label'],
-      ];
-    }
-    if (!empty($cart_item['koopo_ticket_contact_name'])) {
-      $item_data[] = [
-        'name' => __('Contact Name', 'koopo-tickets'),
-        'value' => $cart_item['koopo_ticket_contact_name'],
-      ];
-    }
-    if (!empty($cart_item['koopo_ticket_contact_email'])) {
-      $item_data[] = [
-        'name' => __('Contact Email', 'koopo-tickets'),
-        'value' => $cart_item['koopo_ticket_contact_email'],
-      ];
-    }
-    if (!empty($cart_item['koopo_ticket_contact_phone'])) {
-      $item_data[] = [
-        'name' => __('Contact Phone', 'koopo-tickets'),
-        'value' => $cart_item['koopo_ticket_contact_phone'],
-      ];
-    }
-    if (!empty($cart_item['koopo_ticket_guests']) && is_array($cart_item['koopo_ticket_guests'])) {
-      $item_data[] = [
-        'name' => __('Guests', 'koopo-tickets'),
-        'value' => (string) count($cart_item['koopo_ticket_guests']),
-      ];
-    }
-
     return $item_data;
   }
 
   public static function add_order_item_meta($item, $cart_item_key, $values, $order) {
-    $fields = [
-      'koopo_ticket_event_id' => __('Event ID', 'koopo-tickets'),
-      'koopo_ticket_type_id' => __('Ticket Type ID', 'koopo-tickets'),
-      'koopo_ticket_schedule_id' => __('Schedule ID', 'koopo-tickets'),
-      'koopo_ticket_schedule_label' => __('Event Date', 'koopo-tickets'),
-      'koopo_ticket_contact_name' => __('Contact Name', 'koopo-tickets'),
-      'koopo_ticket_contact_email' => __('Contact Email', 'koopo-tickets'),
-      'koopo_ticket_contact_phone' => __('Contact Phone', 'koopo-tickets'),
+    $hidden = [
+      '_koopo_ticket_event_id' => $values['koopo_ticket_event_id'] ?? null,
+      '_koopo_ticket_type_id' => $values['koopo_ticket_type_id'] ?? null,
+      '_koopo_ticket_schedule_id' => $values['koopo_ticket_schedule_id'] ?? null,
+      '_koopo_ticket_schedule_label' => $values['koopo_ticket_schedule_label'] ?? null,
     ];
 
-    foreach ($fields as $key => $label) {
-      if (!empty($values[$key])) {
-        $item->add_meta_data($label, $values[$key], true);
+    foreach ($hidden as $key => $value) {
+      if (!empty($value)) {
+        $item->add_meta_data($key, $value, true);
       }
     }
 
+    if (!empty($values['koopo_ticket_contact_name'])) {
+      $item->add_meta_data('_koopo_ticket_contact_name', $values['koopo_ticket_contact_name'], true);
+    }
+    if (!empty($values['koopo_ticket_contact_email'])) {
+      $item->add_meta_data('_koopo_ticket_contact_email', $values['koopo_ticket_contact_email'], true);
+    }
+    if (!empty($values['koopo_ticket_contact_phone'])) {
+      $item->add_meta_data('_koopo_ticket_contact_phone', $values['koopo_ticket_contact_phone'], true);
+    }
     if (!empty($values['koopo_ticket_guests'])) {
       $item->add_meta_data('_koopo_ticket_guests', wp_json_encode($values['koopo_ticket_guests']), true);
     }

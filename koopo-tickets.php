@@ -48,6 +48,8 @@ final class Koopo_Tickets {
     require_once __DIR__ . '/includes/woocommerce/class-kt-wc-ticket-product.php';
     require_once __DIR__ . '/includes/woocommerce/class-kt-wc-cart.php';
     require_once __DIR__ . '/includes/frontend/class-kt-ticket-cards.php';
+    require_once __DIR__ . '/includes/customer/class-kt-customer-tickets-dashboard.php';
+    require_once __DIR__ . '/includes/customer/class-kt-customer-tickets-api.php';
 
     Koopo_Tickets\DB::maybe_upgrade();
     Koopo_Tickets\Settings::init();
@@ -58,6 +60,8 @@ final class Koopo_Tickets {
     Koopo_Tickets\Dokan_Dashboard::init();
     Koopo_Tickets\WC_Cart::init();
     Koopo_Tickets\Ticket_Cards::init();
+    Koopo_Tickets\Customer_Tickets_Dashboard::init();
+    Koopo_Tickets\Customer_Tickets_API::init();
   }
 }
 

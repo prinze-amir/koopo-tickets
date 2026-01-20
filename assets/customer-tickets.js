@@ -1,0 +1,123 @@
+(function ($) {
+  'use strict';
+
+  var api = window.KOOPO_TICKETS_DASH || {};
+  if (!api.api_url || !api.nonce) return;
+
+  function request(path, method, data) {
+    return $.ajax({
+      url: api.api_url.replace(/\/$/, '') + '/' + path.replace(/^\//, ''),
+      method: method || 'GET',
+      data: data ? JSON.stringify(data) : null,
+      contentType: 'application/json',
+      beforeSend: function (xhr) {
+        xhr.setRequestHeader('X-WP-Nonce', api.nonce);
+      }
+    });
+  }
+
+  function renderTickets(items) {
+    var $root = $('#koopo-ticket-dashboard');
+    if (!items.length) {
+      $root.html('<p>' + (api.i18n && api.i18n.no_tickets ? api.i18n.no_tickets : 'No tickets found.') + '</p>');
+      return;
+    }
+
+    var html = items.map(function (item) {
+      var guestsHtml = '';
+      if (item.quantity > 1) {
+        guestsHtml = '<div class="koopo-ticket-guest-grid" data-guest-grid>' +
+          buildGuestInputs(item) +
+        '</div>';
+      }
+
+      return '<div class="koopo-ticket-card" data-item-id="' + item.item_id + '">' +
+        '<h3>' + item.ticket_name + '</h3>' +
+        '<div class="koopo-ticket-meta">' + (item.event_title || '') + '</div>' +
+        (item.schedule_label ? '<div class="koopo-ticket-meta">' + item.schedule_label + '</div>' : '') +
+        '<div class="koopo-ticket-meta"><span class="koopo-ticket-status">' + item.status + '</span></div>' +
+        guestsHtml +
+        '<div class="koopo-ticket-actions">' +
+          '<button class="button koopo-ticket-save">Save Guests</button>' +
+          '<button class="button koopo-ticket-send">Send Tickets</button>' +
+        '</div>' +
+        '<div class="koopo-ticket-notice"></div>' +
+      '</div>';
+    }).join('');
+
+    $root.html(html);
+  }
+
+  function buildGuestInputs(item) {
+    var guests = Array.isArray(item.guests) ? item.guests : [];
+    var html = '';
+
+    for (var i = 0; i < item.quantity - 1; i += 1) {
+      var guest = guests[i] || {};
+      html += '<div class="koopo-ticket-guest-card" data-guest-index="' + i + '">' +
+        '<h4>Guest ' + (i + 1) + '</h4>' +
+        '<label>Name</label><input type="text" data-guest-name value="' + (guest.name || '') + '">' +
+        '<label>Email</label><input type="email" data-guest-email value="' + (guest.email || '') + '">' +
+        '<label>Phone</label><input type="tel" data-guest-phone value="' + (guest.phone || '') + '">' +
+      '</div>';
+    }
+
+    return html;
+  }
+
+  function collectGuests($card) {
+    var guests = [];
+    $card.find('.koopo-ticket-guest-card').each(function () {
+      var $guest = $(this);
+      guests.push({
+        name: $guest.find('[data-guest-name]').val(),
+        email: $guest.find('[data-guest-email]').val(),
+        phone: $guest.find('[data-guest-phone]').val()
+      });
+    });
+    return guests;
+  }
+
+  function showNotice($card, type, message) {
+    var $notice = $card.find('.koopo-ticket-notice');
+    $notice.removeClass('is-success is-error');
+    $notice.addClass(type === 'success' ? 'is-success' : 'is-error');
+    $notice.text(message).show();
+  }
+
+  function loadTickets() {
+    var $root = $('#koopo-ticket-dashboard');
+    $root.html('<p>' + (api.i18n && api.i18n.loading ? api.i18n.loading : 'Loading...') + '</p>');
+
+    request('customer/tickets', 'GET').done(function (items) {
+      renderTickets(items || []);
+    });
+  }
+
+  $(document).on('click', '.koopo-ticket-save', function () {
+    var $card = $(this).closest('.koopo-ticket-card');
+    var itemId = $card.data('item-id');
+    var guests = collectGuests($card);
+
+    request('customer/tickets/' + itemId + '/guests', 'POST', { guests: guests }).done(function () {
+      showNotice($card, 'success', api.i18n && api.i18n.save_success ? api.i18n.save_success : 'Saved.');
+    }).fail(function () {
+      showNotice($card, 'error', api.i18n && api.i18n.save_error ? api.i18n.save_error : 'Error.');
+    });
+  });
+
+  $(document).on('click', '.koopo-ticket-send', function () {
+    var $card = $(this).closest('.koopo-ticket-card');
+    var itemId = $card.data('item-id');
+
+    request('customer/tickets/' + itemId + '/send', 'POST').done(function () {
+      showNotice($card, 'success', api.i18n && api.i18n.send_success ? api.i18n.send_success : 'Sent.');
+    }).fail(function () {
+      showNotice($card, 'error', api.i18n && api.i18n.send_error ? api.i18n.send_error : 'Error.');
+    });
+  });
+
+  $(function () {
+    loadTickets();
+  });
+})(jQuery);
