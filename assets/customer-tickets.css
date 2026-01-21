@@ -16,9 +16,30 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
 }
 
-.koopo-ticket-card h3 {
-  margin: 0 0 8px;
+.koopo-ticket-card__header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.koopo-ticket-card__info {
+  flex: 1;
+}
+
+.koopo-ticket-event-title {
   font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.koopo-ticket-event-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.koopo-ticket-event-link:hover {
+  text-decoration: underline;
 }
 
 .koopo-ticket-meta {
@@ -28,12 +49,12 @@
 }
 
 .koopo-ticket-thumb {
-  width: 100%;
-  height: 160px;
+  width: 90px;
+  height: 90px;
   border-radius: 12px;
   background-size: cover;
   background-position: center;
-  margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 .koopo-ticket-actions {

@@ -63,12 +63,14 @@ class Customer_Tickets_API {
           'event_title' => $event_id ? get_the_title($event_id) : '',
           'event_url' => $event_id ? get_permalink($event_id) : '',
           'event_image' => $event_id ? get_the_post_thumbnail_url($event_id, 'medium') : '',
+          'event_location' => $event_id ? WC_Cart::get_event_location($event_id) : '',
           'schedule_label' => $schedule_label,
           'contact_name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
           'contact_email' => (string) $item->get_meta('_koopo_ticket_contact_email'),
           'contact_phone' => (string) $item->get_meta('_koopo_ticket_contact_phone'),
           'guests' => $guests,
           'status' => $order->get_status(),
+          'status_label' => wc_get_order_status_name($order->get_status()),
         ];
       }
     }

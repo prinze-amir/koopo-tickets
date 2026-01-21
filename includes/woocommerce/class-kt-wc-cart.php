@@ -132,7 +132,7 @@ class WC_Cart {
     return $out;
   }
 
-  private static function get_event_location(int $event_id): string {
+  public static function get_event_location(int $event_id): string {
     if (!$event_id || !function_exists('geodir_get_post_meta')) return '';
 
     $address = geodir_get_post_meta($event_id, 'address', true);

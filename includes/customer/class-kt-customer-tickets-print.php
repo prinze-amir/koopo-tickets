@@ -83,9 +83,10 @@ class Customer_Tickets_Print {
       wp_die(__('Print template not found.', 'koopo-tickets'));
     }
 
+    require_once KOOPO_TICKETS_PATH . 'includes/lib/kt-qrcode.php';
     wp_enqueue_style('koopo-ticket-print', KOOPO_TICKETS_URL . 'assets/print-ticket.css', [], KOOPO_TICKETS_VERSION);
-    wp_enqueue_script('koopo-ticket-qrcode', KOOPO_TICKETS_URL . 'assets/qrcode.min.js', [], KOOPO_TICKETS_VERSION, true);
 
+    $data['qr_svgs'] = self::build_qr_svgs($codes);
     $print_data = $data;
     include $template;
     exit;
@@ -93,5 +94,21 @@ class Customer_Tickets_Print {
 
   private static function build_code(int $item_id, int $index): string {
     return 'KT-' . $item_id . '-' . $index;
+  }
+
+  private static function build_qr_svgs(array $codes): array {
+    if (!class_exists('\\geodir_tickets\\QRCode')) return [];
+
+    $svgs = [];
+    foreach ($codes as $entry) {
+      $qr = new \\geodir_tickets\\QRCode();
+      $qr->addData($entry['code']);
+      $qr->make();
+      ob_start();
+      $qr->printSVG(3);
+      $svgs[] = ob_get_clean();
+    }
+
+    return $svgs;
   }
 }

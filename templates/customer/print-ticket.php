@@ -8,6 +8,7 @@ $event_url = $print_data['event_url'] ?? '';
 $schedule_label = $print_data['schedule_label'] ?? '';
 $location = $print_data['location'] ?? '';
 $codes = $print_data['codes'] ?? [];
+$qr_svgs = $print_data['qr_svgs'] ?? [];
 
 ?><!doctype html>
 <html <?php language_attributes(); ?>>
@@ -48,24 +49,12 @@ $codes = $print_data['codes'] ?? [];
           <?php if (!empty($entry['phone'])) : ?>
             <div class="koopo-ticket-print__meta"><?php echo esc_html($entry['phone']); ?></div>
           <?php endif; ?>
-          <div class="koopo-ticket-print__qr" id="koopo-ticket-qr-<?php echo esc_attr($index); ?>"></div>
+          <div class="koopo-ticket-print__qr"><?php echo $qr_svgs[$index] ?? ''; ?></div>
           <div class="koopo-ticket-print__code"><?php echo esc_html($entry['code']); ?></div>
         </div>
       <?php endforeach; ?>
     </div>
   </div>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      if (typeof QRCode === 'undefined') return;
-      var codes = <?php echo wp_json_encode(array_column($codes, 'code')); ?>;
-      codes.forEach(function (code, index) {
-        var el = document.getElementById('koopo-ticket-qr-' + index);
-        if (!el) return;
-        new QRCode(el, { text: code, width: 140, height: 140 });
-      });
-    });
-  </script>
   <?php wp_footer(); ?>
 </body>
 </html>

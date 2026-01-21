@@ -33,18 +33,24 @@
       }
 
       var image = item.event_image ? '<div class="koopo-ticket-thumb" style="background-image:url(' + item.event_image + ')"></div>' : '';
-      var title = item.event_url ? '<a href="' + item.event_url + '">' + (item.event_title || '') + '</a>' : (item.event_title || '');
+      var title = item.event_url ? '<a class="koopo-ticket-event-link" href="' + item.event_url + '">' + (item.event_title || '') + '</a>' : (item.event_title || '');
 
       return '<div class="koopo-ticket-card" data-item-id="' + item.item_id + '">' +
-        image +
-        '<h3>' + item.ticket_name + '</h3>' +
-        '<div class="koopo-ticket-meta">' + title + '</div>' +
+        '<div class="koopo-ticket-card__header">' +
+          image +
+          '<div class="koopo-ticket-card__info">' +
+            '<div class="koopo-ticket-event-title">' + title + '</div>' +
+            '<div class="koopo-ticket-meta">' + item.ticket_name + '</div>' +
+            (item.event_location ? '<div class="koopo-ticket-meta">' + item.event_location + '</div>' : '') +
+          '</div>' +
+        '</div>' +
         (item.schedule_label ? '<div class="koopo-ticket-meta">' + item.schedule_label + '</div>' : '') +
-        '<div class="koopo-ticket-meta"><span class="koopo-ticket-status">' + item.status + '</span></div>' +
+        '<div class="koopo-ticket-meta"><span class="koopo-ticket-status">' + (item.status_label || item.status) + '</span></div>' +
         guestsHtml +
         '<div class="koopo-ticket-actions">' +
           '<button class="button koopo-ticket-save">Save Guests</button>' +
           '<button class="button koopo-ticket-send">Send Tickets</button>' +
+          '<a class="button" target="_blank" href="?koopo_ticket_print=' + item.item_id + '">View/Print Tickets</a>' +
         '</div>' +
         '<div class="koopo-ticket-notice"></div>' +
       '</div>';
