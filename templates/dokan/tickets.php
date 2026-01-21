@@ -129,5 +129,23 @@ defined('ABSPATH') || exit;
         </tbody>
       </table>
     </div>
+
+    <div class="koopo-tickets-card">
+      <h3><?php echo esc_html__('Ticket Check-In', 'koopo-tickets'); ?></h3>
+      <p class="koopo-tickets-note"><?php echo esc_html__('Verify and redeem tickets by code.', 'koopo-tickets'); ?></p>
+      <form id="koopo-ticket-checkin">
+        <div class="koopo-tickets-grid">
+          <div>
+            <label for="koopo-ticket-code"><?php echo esc_html__('Ticket Code', 'koopo-tickets'); ?></label>
+            <input id="koopo-ticket-code" type="text" required>
+          </div>
+        </div>
+        <div class="koopo-tickets-actions">
+          <button type="submit" class="button button-primary"><?php echo esc_html__('Verify', 'koopo-tickets'); ?></button>
+          <button type="button" class="button" id="koopo-ticket-redeem"><?php echo esc_html__('Redeem', 'koopo-tickets'); ?></button>
+        </div>
+      </form>
+      <div id="koopo-ticket-checkin-result" class="koopo-tickets-note" style="margin-top:10px;"></div>
+    </div>
   </div>
 </div>
