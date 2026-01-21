@@ -36,34 +36,15 @@ class Customer_Tickets_Print {
     $event_id = (int) $item->get_meta('_koopo_ticket_event_id');
     $schedule_label = (string) $item->get_meta('_koopo_ticket_schedule_label');
     $location = WC_Cart::get_event_location($event_id);
-    $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
-    $guests = $guests_raw ? json_decode($guests_raw, true) : [];
-    if (!is_array($guests)) $guests = [];
-
     $contact = [
       'name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
       'email' => (string) $item->get_meta('_koopo_ticket_contact_email'),
       'phone' => (string) $item->get_meta('_koopo_ticket_contact_phone'),
     ];
 
-    $codes = [];
-    if (!empty($guests)) {
-      foreach ($guests as $index => $guest) {
-        $codes[] = [
-          'label' => $guest['name'] ?? 'Guest ' . ($index + 1),
-          'email' => $guest['email'] ?? '',
-          'phone' => $guest['phone'] ?? '',
-          'code' => self::build_code($item_id, $index + 1),
-        ];
-      }
-    } else {
-      $codes[] = [
-        'label' => $contact['name'] ?: __('Attendee', 'koopo-tickets'),
-        'email' => $contact['email'],
-        'phone' => $contact['phone'],
-        'code' => self::build_code($item_id, 1),
-      ];
-    }
+    $codes = self::build_attendee_codes($item, $contact);
+
+    $logo = self::get_site_logo();
 
     $data = [
       'item_id' => $item_id,
@@ -76,6 +57,7 @@ class Customer_Tickets_Print {
       'schedule_label' => $schedule_label,
       'location' => $location,
       'codes' => $codes,
+      'logo' => $logo,
     ];
 
     $template = KOOPO_TICKETS_PATH . 'templates/customer/print-ticket.php';
@@ -94,6 +76,45 @@ class Customer_Tickets_Print {
 
   private static function build_code(int $item_id, int $index): string {
     return 'KT-' . $item_id . '-' . $index;
+  }
+
+  private static function build_attendee_codes(\WC_Order_Item_Product $item, array $contact): array {
+    $quantity = (int) $item->get_quantity();
+    $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
+    $guests = $guests_raw ? json_decode($guests_raw, true) : [];
+    if (!is_array($guests)) $guests = [];
+
+    $codes = [];
+    $codes[] = [
+      'label' => $contact['name'] ?: __('You', 'koopo-tickets'),
+      'email' => $contact['email'],
+      'phone' => $contact['phone'],
+      'code' => self::build_code($item->get_id(), 1),
+    ];
+
+    for ($i = 0; $i < max(0, $quantity - 1); $i++) {
+      $guest = $guests[$i] ?? [];
+      $label = sanitize_text_field($guest['name'] ?? '') ?: sprintf(__('Guest %d', 'koopo-tickets'), $i + 1);
+      $codes[] = [
+        'label' => $label,
+        'email' => sanitize_email($guest['email'] ?? ''),
+        'phone' => sanitize_text_field($guest['phone'] ?? ''),
+        'code' => self::build_code($item->get_id(), $i + 2),
+      ];
+    }
+
+    return $codes;
+  }
+
+  private static function get_site_logo(): string {
+    $logo_id = get_theme_mod('custom_logo');
+    if ($logo_id) {
+      $url = wp_get_attachment_image_url($logo_id, 'medium');
+      if ($url) return $url;
+    }
+
+    $icon = get_site_icon_url(128);
+    return $icon ?: '';
   }
 
   private static function build_qr_svgs(array $codes): array {

@@ -27,6 +27,12 @@ class Customer_Tickets_API {
       'callback' => [__CLASS__, 'send_tickets'],
       'permission_callback' => fn() => is_user_logged_in(),
     ]);
+
+    register_rest_route('koopo/v1', '/customer/friends', [
+      'methods' => 'GET',
+      'callback' => [__CLASS__, 'list_friends'],
+      'permission_callback' => fn() => is_user_logged_in(),
+    ]);
   }
 
   public static function list_tickets(\WP_REST_Request $req) {
@@ -46,6 +52,7 @@ class Customer_Tickets_API {
         $ticket_type_id = (int) $item->get_meta('_koopo_ticket_type_id');
         $event_id = (int) $item->get_meta('_koopo_ticket_event_id');
         $schedule_label = (string) $item->get_meta('_koopo_ticket_schedule_label');
+        $schedule_id = (int) $item->get_meta('_koopo_ticket_schedule_id');
 
         if (!$ticket_type_id && !$event_id) continue;
 
@@ -53,22 +60,51 @@ class Customer_Tickets_API {
         $guests = $guests_raw ? json_decode($guests_raw, true) : [];
         if (!is_array($guests)) $guests = [];
 
+        $schedule = $schedule_id && class_exists('GeoDir_Event_Schedules')
+          ? \GeoDir_Event_Schedules::get_schedule($schedule_id)
+          : null;
+
+        $schedule_date = '';
+        $schedule_time = '';
+        if ($schedule && !empty($schedule->start_date)) {
+          $date_format = function_exists('geodir_event_date_format') ? geodir_event_date_format() : 'Y-m-d';
+          $time_format = function_exists('geodir_event_time_format') ? geodir_event_time_format() : 'H:i';
+          $start_date = $schedule->start_date;
+          $start_time = $schedule->start_time ?? '00:00:00';
+          $end_time = $schedule->end_time ?? '';
+          $schedule_date = date_i18n($date_format, strtotime($start_date));
+          if (!empty($schedule->all_day)) {
+            $schedule_time = __('All day', 'koopo-tickets');
+          } else {
+            $schedule_time = date_i18n($time_format, strtotime($start_time));
+            if (!empty($end_time)) {
+              $schedule_time .= ' - ' . date_i18n($time_format, strtotime($end_time));
+            }
+          }
+        }
+
+        $quantity = (int) $item->get_quantity();
+        $slots = self::build_attendee_slots($item, $quantity);
+
         $out[] = [
           'order_id' => $order->get_id(),
           'order_number' => $order->get_order_number(),
           'item_id' => $item_id,
           'ticket_name' => $item->get_name(),
-          'quantity' => $item->get_quantity(),
+          'quantity' => $quantity,
           'event_id' => $event_id,
           'event_title' => $event_id ? get_the_title($event_id) : '',
           'event_url' => $event_id ? get_permalink($event_id) : '',
           'event_image' => $event_id ? get_the_post_thumbnail_url($event_id, 'medium') : '',
           'event_location' => $event_id ? WC_Cart::get_event_location($event_id) : '',
           'schedule_label' => $schedule_label,
+          'schedule_date' => $schedule_date,
+          'schedule_time' => $schedule_time,
           'contact_name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
           'contact_email' => (string) $item->get_meta('_koopo_ticket_contact_email'),
           'contact_phone' => (string) $item->get_meta('_koopo_ticket_contact_phone'),
           'guests' => $guests,
+          'attendees' => $slots,
           'status' => $order->get_status(),
           'status_label' => wc_get_order_status_name($order->get_status()),
         ];
@@ -133,6 +169,45 @@ class Customer_Tickets_API {
     return new \WP_REST_Response(['success' => true], 200);
   }
 
+  public static function list_friends(\WP_REST_Request $req) {
+    if (!function_exists('friends_get_friend_user_ids')) {
+      return new \WP_REST_Response([], 200);
+    }
+
+    $user_id = get_current_user_id();
+    $friend_ids = friends_get_friend_user_ids($user_id);
+    if (empty($friend_ids)) return new \WP_REST_Response([], 200);
+
+    $search = sanitize_text_field((string) $req->get_param('search'));
+    $args = [
+      'include' => $friend_ids,
+      'number' => 20,
+    ];
+    if ($search) {
+      $args['search'] = '*' . $search . '*';
+      $args['search_columns'] = ['user_login', 'display_name', 'user_email'];
+    }
+
+    $users = get_users($args);
+    $out = [];
+    foreach ($users as $user) {
+      $out[] = [
+        'id' => $user->ID,
+        'name' => $user->display_name,
+        'email' => $user->user_email,
+        'avatar' => function_exists('bp_core_fetch_avatar') ? bp_core_fetch_avatar([
+          'item_id' => $user->ID,
+          'type' => 'thumb',
+          'width' => 48,
+          'height' => 48,
+          'html' => false,
+        ]) : get_avatar_url($user->ID, ['size' => 48]),
+      ];
+    }
+
+    return new \WP_REST_Response($out, 200);
+  }
+
   private static function get_order_item_for_user(int $item_id) {
     $item = new \WC_Order_Item_Product($item_id);
     if (!$item || !$item->get_id()) return null;
@@ -143,5 +218,58 @@ class Customer_Tickets_API {
     if ((int) $order->get_user_id() !== get_current_user_id()) return null;
 
     return $item;
+  }
+
+  private static function build_attendee_slots($item, int $quantity): array {
+    $contact = [
+      'name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
+      'email' => (string) $item->get_meta('_koopo_ticket_contact_email'),
+      'phone' => (string) $item->get_meta('_koopo_ticket_contact_phone'),
+    ];
+
+    $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
+    $guests = $guests_raw ? json_decode($guests_raw, true) : [];
+    if (!is_array($guests)) $guests = [];
+
+    $slots = [];
+    $slots[] = self::build_attendee($contact, __('You', 'koopo-tickets'));
+
+    for ($i = 0; $i < max(0, $quantity - 1); $i++) {
+      $guest = $guests[$i] ?? [];
+      $slots[] = self::build_attendee($guest, sprintf(__('Guest %d', 'koopo-tickets'), $i + 1));
+    }
+
+    return $slots;
+  }
+
+  private static function build_attendee(array $data, string $fallback_label): array {
+    $name = sanitize_text_field($data['name'] ?? '');
+    $email = sanitize_email($data['email'] ?? '');
+    $phone = sanitize_text_field($data['phone'] ?? '');
+    $label = $name ?: $fallback_label;
+
+    $avatar = '';
+    if ($email) {
+      $user = get_user_by('email', $email);
+      if ($user && function_exists('bp_core_fetch_avatar')) {
+        $avatar = bp_core_fetch_avatar([
+          'item_id' => $user->ID,
+          'type' => 'thumb',
+          'width' => 64,
+          'height' => 64,
+          'html' => false,
+        ]);
+      } else {
+        $avatar = get_avatar_url($email, ['size' => 64]);
+      }
+    }
+
+    return [
+      'label' => $label,
+      'name' => $name,
+      'email' => $email,
+      'phone' => $phone,
+      'avatar' => $avatar,
+    ];
   }
 }

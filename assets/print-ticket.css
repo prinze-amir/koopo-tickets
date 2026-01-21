@@ -17,18 +17,36 @@
 
 .koopo-ticket-print__header {
   display: grid;
-  grid-template-columns: 140px 1fr auto;
+  grid-template-columns: 160px 1fr auto;
   gap: 16px;
   align-items: center;
   margin-bottom: 20px;
 }
 
-.koopo-ticket-print__image {
-  width: 140px;
-  height: 140px;
-  border-radius: 12px;
-  background-size: cover;
-  background-position: center;
+.koopo-ticket-print__brand {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.koopo-ticket-print__brand img {
+  max-width: 140px;
+  max-height: 80px;
+  object-fit: contain;
+}
+
+.koopo-ticket-print__tag {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #666;
+}
+
+.koopo-ticket-print__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .koopo-ticket-print__header h1 {
@@ -48,6 +66,12 @@
   padding: 16px;
   background: #fafafa;
   text-align: center;
+}
+
+.koopo-ticket-print__seat {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #666;
 }
 
 .koopo-ticket-print__meta {

@@ -48,6 +48,29 @@
   margin-bottom: 8px;
 }
 
+.koopo-ticket-dates {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.koopo-ticket-avatars {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+
+.koopo-ticket-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
 .koopo-ticket-thumb {
   width: 90px;
   height: 90px;
@@ -93,6 +116,37 @@
   padding: 8px 10px;
   border: 1px solid #d8d8d8;
   border-radius: 8px;
+}
+
+.koopo-ticket-friend-results {
+  border: 1px solid #e1e1e1;
+  border-radius: 8px;
+  background: #fff;
+  margin-top: 6px;
+  padding: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.koopo-ticket-friend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.koopo-ticket-friend:hover {
+  background: #f6f6f6;
+}
+
+.koopo-ticket-friend-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
 }
 
 .koopo-ticket-status {

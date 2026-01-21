@@ -34,6 +34,7 @@
 
       var image = item.event_image ? '<div class="koopo-ticket-thumb" style="background-image:url(' + item.event_image + ')"></div>' : '';
       var title = item.event_url ? '<a class="koopo-ticket-event-link" href="' + item.event_url + '">' + (item.event_title || '') + '</a>' : (item.event_title || '');
+      var attendees = buildAttendeeAvatars(item.attendees || []);
 
       return '<div class="koopo-ticket-card" data-item-id="' + item.item_id + '">' +
         '<div class="koopo-ticket-card__header">' +
@@ -42,15 +43,21 @@
             '<div class="koopo-ticket-event-title">' + title + '</div>' +
             '<div class="koopo-ticket-meta">' + item.ticket_name + '</div>' +
             (item.event_location ? '<div class="koopo-ticket-meta">' + item.event_location + '</div>' : '') +
+            '<div class="koopo-ticket-meta">Tickets: ' + item.quantity + '</div>' +
           '</div>' +
         '</div>' +
-        (item.schedule_label ? '<div class="koopo-ticket-meta">' + item.schedule_label + '</div>' : '') +
+        '<div class="koopo-ticket-meta koopo-ticket-dates">' +
+          (item.schedule_date ? '<span>Date: ' + item.schedule_date + '</span>' : '') +
+          (item.schedule_time ? '<span>Time: ' + item.schedule_time + '</span>' : '') +
+        '</div>' +
+        attendees +
         '<div class="koopo-ticket-meta"><span class="koopo-ticket-status">' + (item.status_label || item.status) + '</span></div>' +
         guestsHtml +
         '<div class="koopo-ticket-actions">' +
           '<button class="button koopo-ticket-save">Save Guests</button>' +
           '<button class="button koopo-ticket-send">Send Tickets</button>' +
           '<a class="button" target="_blank" href="?koopo_ticket_print=' + item.item_id + '">View/Print Tickets</a>' +
+          '<a class="button" target="_blank" href="?koopo_ticket_print=' + item.item_id + '&download=1">Download</a>' +
         '</div>' +
         '<div class="koopo-ticket-notice"></div>' +
       '</div>';
@@ -70,10 +77,24 @@
         '<label>Name</label><input type="text" data-guest-name value="' + (guest.name || '') + '">' +
         '<label>Email</label><input type="email" data-guest-email value="' + (guest.email || '') + '">' +
         '<label>Phone</label><input type="tel" data-guest-phone value="' + (guest.phone || '') + '">' +
+        '<label>Assign from friends</label>' +
+        '<input type="text" class="koopo-ticket-friend-search" placeholder="Search friends..." data-guest-search>' +
+        '<div class="koopo-ticket-friend-results" data-guest-results style="display:none;"></div>' +
       '</div>';
     }
 
     return html;
+  }
+
+  function buildAttendeeAvatars(attendees) {
+    if (!Array.isArray(attendees) || !attendees.length) return '';
+    var avatars = attendees.map(function (attendee) {
+      if (!attendee.avatar) return '';
+      return '<div class="koopo-ticket-avatar" title="' + attendee.label + '" style="background-image:url(' + attendee.avatar + ')"></div>';
+    }).join('');
+
+    if (!avatars) return '';
+    return '<div class="koopo-ticket-avatars">' + avatars + '</div>';
   }
 
   function collectGuests($card) {
@@ -133,6 +154,40 @@
     var $grid = $btn.closest('.koopo-ticket-card').find('[data-guest-grid]');
     $grid.toggle();
     $btn.text($grid.is(':visible') ? 'Hide Guests' : 'Show Guests');
+  });
+
+  $(document).on('input', '.koopo-ticket-friend-search', function () {
+    var $input = $(this);
+    var query = $input.val();
+    var $results = $input.closest('.koopo-ticket-guest-card').find('[data-guest-results]');
+    if (!query || query.length < 2) {
+      $results.hide().empty();
+      return;
+    }
+
+    request('customer/friends?search=' + encodeURIComponent(query), 'GET').done(function (items) {
+      if (!items || !items.length) {
+        $results.hide().empty();
+        return;
+      }
+
+      var html = items.map(function (friend) {
+        return '<div class="koopo-ticket-friend" data-name="' + friend.name + '" data-email="' + friend.email + '">' +
+          '<span class="koopo-ticket-friend-avatar" style="background-image:url(' + friend.avatar + ')"></span>' +
+          '<span>' + friend.name + ' (' + friend.email + ')</span>' +
+        '</div>';
+      }).join('');
+
+      $results.html(html).show();
+    });
+  });
+
+  $(document).on('click', '.koopo-ticket-friend', function () {
+    var $friend = $(this);
+    var $card = $friend.closest('.koopo-ticket-guest-card');
+    $card.find('[data-guest-name]').val($friend.data('name'));
+    $card.find('[data-guest-email]').val($friend.data('email'));
+    $card.find('[data-guest-results]').hide().empty();
   });
 
   $(function () {
