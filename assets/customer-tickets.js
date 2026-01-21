@@ -26,14 +26,19 @@
     var html = items.map(function (item) {
       var guestsHtml = '';
       if (item.quantity > 1) {
-        guestsHtml = '<div class="koopo-ticket-guest-grid" data-guest-grid>' +
-          buildGuestInputs(item) +
-        '</div>';
+        guestsHtml = '<button class="button koopo-ticket-toggle-guests">Show Guests</button>' +
+          '<div class="koopo-ticket-guest-grid" data-guest-grid style="display:none;">' +
+            buildGuestInputs(item) +
+          '</div>';
       }
 
+      var image = item.event_image ? '<div class="koopo-ticket-thumb" style="background-image:url(' + item.event_image + ')"></div>' : '';
+      var title = item.event_url ? '<a href="' + item.event_url + '">' + (item.event_title || '') + '</a>' : (item.event_title || '');
+
       return '<div class="koopo-ticket-card" data-item-id="' + item.item_id + '">' +
+        image +
         '<h3>' + item.ticket_name + '</h3>' +
-        '<div class="koopo-ticket-meta">' + (item.event_title || '') + '</div>' +
+        '<div class="koopo-ticket-meta">' + title + '</div>' +
         (item.schedule_label ? '<div class="koopo-ticket-meta">' + item.schedule_label + '</div>' : '') +
         '<div class="koopo-ticket-meta"><span class="koopo-ticket-status">' + item.status + '</span></div>' +
         guestsHtml +
@@ -115,6 +120,13 @@
     }).fail(function () {
       showNotice($card, 'error', api.i18n && api.i18n.send_error ? api.i18n.send_error : 'Error.');
     });
+  });
+
+  $(document).on('click', '.koopo-ticket-toggle-guests', function () {
+    var $btn = $(this);
+    var $grid = $btn.closest('.koopo-ticket-card').find('[data-guest-grid]');
+    $grid.toggle();
+    $btn.text($grid.is(':visible') ? 'Hide Guests' : 'Show Guests');
   });
 
   $(function () {

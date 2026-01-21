@@ -62,6 +62,23 @@ class WC_Cart {
   }
 
   public static function display_item_data($item_data, $cart_item) {
+    if (!empty($cart_item['koopo_ticket_schedule_label'])) {
+      $item_data[] = [
+        'name' => __('Event Date', 'koopo-tickets'),
+        'value' => $cart_item['koopo_ticket_schedule_label'],
+      ];
+    }
+
+    if (!empty($cart_item['koopo_ticket_event_id'])) {
+      $location = self::get_event_location((int) $cart_item['koopo_ticket_event_id']);
+      if ($location) {
+        $item_data[] = [
+          'name' => __('Location', 'koopo-tickets'),
+          'value' => $location,
+        ];
+      }
+    }
+
     return $item_data;
   }
 
@@ -113,5 +130,20 @@ class WC_Cart {
     }
 
     return $out;
+  }
+
+  private static function get_event_location(int $event_id): string {
+    if (!$event_id || !function_exists('geodir_get_post_meta')) return '';
+
+    $address = geodir_get_post_meta($event_id, 'address', true);
+    if ($address) return (string) $address;
+
+    $city = geodir_get_post_meta($event_id, 'city', true);
+    $region = geodir_get_post_meta($event_id, 'region', true);
+    $zip = geodir_get_post_meta($event_id, 'zip', true);
+    $country = geodir_get_post_meta($event_id, 'country', true);
+
+    $parts = array_filter([$city, $region, $zip, $country]);
+    return $parts ? implode(', ', $parts) : '';
   }
 }

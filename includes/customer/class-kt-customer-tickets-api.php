@@ -61,6 +61,8 @@ class Customer_Tickets_API {
           'quantity' => $item->get_quantity(),
           'event_id' => $event_id,
           'event_title' => $event_id ? get_the_title($event_id) : '',
+          'event_url' => $event_id ? get_permalink($event_id) : '',
+          'event_image' => $event_id ? get_the_post_thumbnail_url($event_id, 'medium') : '',
           'schedule_label' => $schedule_label,
           'contact_name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
           'contact_email' => (string) $item->get_meta('_koopo_ticket_contact_email'),

@@ -27,6 +27,15 @@
   margin-bottom: 8px;
 }
 
+.koopo-ticket-thumb {
+  width: 100%;
+  height: 160px;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+  margin-bottom: 12px;
+}
+
 .koopo-ticket-actions {
   display: flex;
   gap: 10px;
