@@ -97,11 +97,11 @@ class Customer_Tickets_Print {
   }
 
   private static function build_qr_svgs(array $codes): array {
-    if (!class_exists('\\geodir_tickets\\QRCode')) return [];
+    if (!class_exists('\geodir_tickets\QRCode')) return [];
 
     $svgs = [];
     foreach ($codes as $entry) {
-      $qr = new \\geodir_tickets\\QRCode();
+      $qr = new \geodir_tickets\QRCode();
       $qr->addData($entry['code']);
       $qr->make();
       ob_start();
