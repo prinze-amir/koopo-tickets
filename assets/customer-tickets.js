@@ -79,6 +79,7 @@
         '<label>Phone</label><input type="tel" data-guest-phone value="' + (guest.phone || '') + '">' +
         '<label>Assign from friends</label>' +
         '<input type="text" class="koopo-ticket-friend-search" placeholder="Search friends..." data-guest-search>' +
+        '<div class="koopo-ticket-friend-spinner"></div>' +
         '<div class="koopo-ticket-friend-results" data-guest-results style="display:none;"></div>' +
       '</div>';
     }
@@ -160,14 +161,18 @@
     var $input = $(this);
     var query = $input.val();
     var $results = $input.closest('.koopo-ticket-guest-card').find('[data-guest-results]');
+    var $spinner = $input.closest('.koopo-ticket-guest-card').find('.koopo-ticket-friend-spinner');
     if (!query || query.length < 2) {
       $results.hide().empty();
+      $spinner.hide();
       return;
     }
 
+    $spinner.show();
     request('customer/friends?search=' + encodeURIComponent(query), 'GET').done(function (items) {
       if (!items || !items.length) {
         $results.hide().empty();
+        $spinner.hide();
         return;
       }
 
@@ -179,6 +184,7 @@
       }).join('');
 
       $results.html(html).show();
+      $spinner.hide();
     });
   });
 
@@ -188,6 +194,7 @@
     $card.find('[data-guest-name]').val($friend.data('name'));
     $card.find('[data-guest-email]').val($friend.data('email'));
     $card.find('[data-guest-results]').hide().empty();
+    $card.find('.koopo-ticket-friend-spinner').hide();
   });
 
   $(function () {

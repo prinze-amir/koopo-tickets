@@ -86,6 +86,8 @@ class Customer_Tickets_API {
         $quantity = (int) $item->get_quantity();
         $slots = self::build_attendee_slots($item, $quantity);
 
+        $ticket_status = self::map_ticket_status($order->get_status());
+
         $out[] = [
           'order_id' => $order->get_id(),
           'order_number' => $order->get_order_number(),
@@ -105,8 +107,8 @@ class Customer_Tickets_API {
           'contact_phone' => (string) $item->get_meta('_koopo_ticket_contact_phone'),
           'guests' => $guests,
           'attendees' => $slots,
-          'status' => $order->get_status(),
-          'status_label' => wc_get_order_status_name($order->get_status()),
+          'status' => $ticket_status,
+          'status_label' => ucfirst($ticket_status),
         ];
       }
     }
@@ -271,5 +273,21 @@ class Customer_Tickets_API {
       'phone' => $phone,
       'avatar' => $avatar,
     ];
+  }
+
+  private static function map_ticket_status(string $order_status): string {
+    switch ($order_status) {
+      case 'completed':
+      case 'processing':
+        return 'issued';
+      case 'refunded':
+        return 'refunded';
+      case 'cancelled':
+        return 'cancelled';
+      case 'failed':
+        return 'cancelled';
+      default:
+        return 'issued';
+    }
   }
 }

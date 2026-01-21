@@ -74,6 +74,12 @@
   color: #666;
 }
 
+.koopo-ticket-print__extra {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #666;
+}
+
 .koopo-ticket-print__meta {
   font-size: 13px;
   color: #666;

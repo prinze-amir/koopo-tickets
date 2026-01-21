@@ -57,6 +57,7 @@ $logo = $print_data['logo'] ?? '';
             <div class="koopo-ticket-print__meta"><?php echo esc_html($entry['phone']); ?></div>
           <?php endif; ?>
           <div class="koopo-ticket-print__seat"><?php echo esc_html__('Seat:', 'koopo-tickets'); ?> ____</div>
+          <div class="koopo-ticket-print__extra"><?php echo esc_html__('Extra:', 'koopo-tickets'); ?> ____</div>
           <div class="koopo-ticket-print__qr"><?php echo $qr_svgs[$index] ?? ''; ?></div>
           <div class="koopo-ticket-print__code"><?php echo esc_html($entry['code']); ?></div>
         </div>

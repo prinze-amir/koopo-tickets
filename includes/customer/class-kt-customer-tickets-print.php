@@ -36,6 +36,7 @@ class Customer_Tickets_Print {
     $event_id = (int) $item->get_meta('_koopo_ticket_event_id');
     $schedule_label = (string) $item->get_meta('_koopo_ticket_schedule_label');
     $location = WC_Cart::get_event_location($event_id);
+
     $contact = [
       'name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
       'email' => (string) $item->get_meta('_koopo_ticket_contact_email'),
@@ -43,7 +44,6 @@ class Customer_Tickets_Print {
     ];
 
     $codes = self::build_attendee_codes($item, $contact);
-
     $logo = self::get_site_logo();
 
     $data = [
@@ -79,6 +79,32 @@ class Customer_Tickets_Print {
   }
 
   private static function build_attendee_codes(\WC_Order_Item_Product $item, array $contact): array {
+    global $wpdb;
+    $table = $wpdb->prefix . 'koopo_tickets';
+    $rows = $wpdb->get_results(
+      $wpdb->prepare(
+        "SELECT * FROM {$table} WHERE order_item_id = %d ORDER BY attendee_index ASC",
+        $item->get_id()
+      )
+    );
+
+    if (!empty($rows)) {
+      $codes = [];
+      foreach ($rows as $row) {
+        $label = $row->attendee_name ?: sprintf(__('Guest %d', 'koopo-tickets'), (int) $row->attendee_index);
+        if ((int) $row->attendee_index === 1 && $contact['name']) {
+          $label = $contact['name'];
+        }
+        $codes[] = [
+          'label' => $label,
+          'email' => (string) $row->attendee_email,
+          'phone' => (string) $row->attendee_phone,
+          'code' => (string) $row->code,
+        ];
+      }
+      return $codes;
+    }
+
     $quantity = (int) $item->get_quantity();
     $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
     $guests = $guests_raw ? json_decode($guests_raw, true) : [];
