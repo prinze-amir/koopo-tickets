@@ -87,6 +87,25 @@
   flex-wrap: wrap;
 }
 
+.koopo-ticket-actions .is-loading {
+  position: relative;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.koopo-ticket-actions .is-loading::after {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border: 2px solid #ddd;
+  border-top-color: #ff8c00;
+  border-radius: 50%;
+  display: inline-block;
+  margin-left: 8px;
+  animation: koopo-ticket-spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
 .koopo-ticket-guest-grid {
   display: grid;
   gap: 12px;
@@ -116,6 +135,32 @@
   padding: 8px 10px;
   border: 1px solid #d8d8d8;
   border-radius: 8px;
+}
+
+.koopo-ticket-assigned {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f6f6f6;
+  padding: 8px 10px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.koopo-ticket-assigned-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+}
+
+.koopo-ticket-assigned-name {
+  font-weight: 600;
+}
+
+.koopo-ticket-guest-editor {
+  margin-top: 8px;
 }
 
 .koopo-ticket-friend-results {

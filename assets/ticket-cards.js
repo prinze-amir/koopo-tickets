@@ -289,7 +289,7 @@
     }
 
     var button = $(this);
-    button.prop('disabled', true);
+    button.prop('disabled', true).addClass('is-loading');
 
     addItemsToCart($modal, selections, function () {
       var checkoutUrl = (window.KOOPO_TICKETS_FRONTEND && KOOPO_TICKETS_FRONTEND.checkout_url) ? KOOPO_TICKETS_FRONTEND.checkout_url : '';

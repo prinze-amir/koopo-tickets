@@ -33,22 +33,30 @@
     e.preventDefault();
     var code = $('#koopo-ticket-code').val();
     if (!code) return;
+    var $btn = $(this).find('button[type=\"submit\"]');
+    $btn.prop('disabled', true).addClass('is-loading');
     request('tickets/verify', 'POST', { code: code }).done(function (data) {
       renderResult(data, false);
     }).fail(function (xhr) {
       var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Ticket not found.';
       renderResult(msg, true);
+    }).always(function () {
+      $btn.prop('disabled', false).removeClass('is-loading');
     });
   });
 
   $(document).on('click', '#koopo-ticket-redeem', function () {
     var code = $('#koopo-ticket-code').val();
     if (!code) return;
+    var $btn = $(this);
+    $btn.prop('disabled', true).addClass('is-loading');
     request('tickets/redeem', 'POST', { code: code }).done(function (data) {
       renderResult(data, false);
     }).fail(function (xhr) {
       var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Unable to redeem.';
       renderResult(msg, true);
+    }).always(function () {
+      $btn.prop('disabled', false).removeClass('is-loading');
     });
   });
 })(jQuery);

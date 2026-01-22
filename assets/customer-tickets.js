@@ -54,7 +54,7 @@
         '<div class="koopo-ticket-meta"><span class="koopo-ticket-status">' + (item.status_label || item.status) + '</span></div>' +
         guestsHtml +
         '<div class="koopo-ticket-actions">' +
-          '<button class="button koopo-ticket-save">Save Guests</button>' +
+          (item.quantity > 1 ? '<button class="button koopo-ticket-save">Save Guests</button>' : '') +
           '<button class="button koopo-ticket-send">Send Tickets</button>' +
           '<a class="button" target="_blank" href="?koopo_ticket_print=' + item.item_id + '">View/Print Tickets</a>' +
           '<a class="button" target="_blank" href="?koopo_ticket_print=' + item.item_id + '&download=1">Download</a>' +
@@ -68,23 +68,46 @@
 
   function buildGuestInputs(item) {
     var guests = Array.isArray(item.guests) ? item.guests : [];
+    var attendees = Array.isArray(item.attendees) ? item.attendees : [];
     var html = '';
 
     for (var i = 0; i < item.quantity - 1; i += 1) {
       var guest = guests[i] || {};
+      var attendee = attendees[i + 1] || {};
+      var assigned = (attendee.email || attendee.name);
       html += '<div class="koopo-ticket-guest-card" data-guest-index="' + i + '">' +
         '<h4>Guest ' + (i + 1) + '</h4>' +
-        '<label>Name</label><input type="text" data-guest-name value="' + (guest.name || '') + '">' +
-        '<label>Email</label><input type="email" data-guest-email value="' + (guest.email || '') + '">' +
-        '<label>Phone</label><input type="tel" data-guest-phone value="' + (guest.phone || '') + '">' +
-        '<label>Assign from friends</label>' +
-        '<input type="text" class="koopo-ticket-friend-search" placeholder="Search friends..." data-guest-search>' +
-        '<div class="koopo-ticket-friend-spinner"></div>' +
-        '<div class="koopo-ticket-friend-results" data-guest-results style="display:none;"></div>' +
+        buildAssignedGuest(attendee, assigned) +
+        buildGuestEditor(guest, assigned) +
       '</div>';
     }
 
     return html;
+  }
+
+  function buildAssignedGuest(attendee, assigned) {
+    if (!assigned) return '';
+    var avatar = attendee.avatar ? '<span class="koopo-ticket-assigned-avatar" style="background-image:url(' + attendee.avatar + ')"></span>' : '';
+    var name = attendee.name || attendee.label || 'Assigned';
+    var email = attendee.email ? '<div class="koopo-ticket-meta">' + attendee.email + '</div>' : '';
+    return '<div class="koopo-ticket-assigned">' +
+      avatar +
+      '<div><div class="koopo-ticket-assigned-name">' + name + '</div>' + email + '</div>' +
+      '<button type="button" class="button koopo-ticket-unassign">Remove</button>' +
+    '</div>';
+  }
+
+  function buildGuestEditor(guest, assigned) {
+    var style = assigned ? 'style="display:none;"' : '';
+    return '<div class="koopo-ticket-guest-editor" ' + style + '>' +
+      '<label>Assign from friends</label>' +
+      '<input type="text" class="koopo-ticket-friend-search" placeholder="Search friends..." data-guest-search>' +
+      '<div class="koopo-ticket-friend-spinner"></div>' +
+      '<div class="koopo-ticket-friend-results" data-guest-results style="display:none;"></div>' +
+      '<label>Name</label><input type="text" data-guest-name value="' + (guest.name || '') + '">' +
+      '<label>Email</label><input type="email" data-guest-email value="' + (guest.email || '') + '">' +
+      '<label>Phone</label><input type="tel" data-guest-phone value="' + (guest.phone || '') + '">' +
+    '</div>';
   }
 
   function buildAttendeeAvatars(attendees) {
@@ -131,22 +154,30 @@
     var $card = $(this).closest('.koopo-ticket-card');
     var itemId = $card.data('item-id');
     var guests = collectGuests($card);
+    var $btn = $(this);
+    $btn.prop('disabled', true).addClass('is-loading');
 
     request('customer/tickets/' + itemId + '/guests', 'POST', { guests: guests }).done(function () {
       showNotice($card, 'success', api.i18n && api.i18n.save_success ? api.i18n.save_success : 'Saved.');
     }).fail(function () {
       showNotice($card, 'error', api.i18n && api.i18n.save_error ? api.i18n.save_error : 'Error.');
+    }).always(function () {
+      $btn.prop('disabled', false).removeClass('is-loading');
     });
   });
 
   $(document).on('click', '.koopo-ticket-send', function () {
     var $card = $(this).closest('.koopo-ticket-card');
     var itemId = $card.data('item-id');
+    var $btn = $(this);
+    $btn.prop('disabled', true).addClass('is-loading');
 
     request('customer/tickets/' + itemId + '/send', 'POST').done(function () {
       showNotice($card, 'success', api.i18n && api.i18n.send_success ? api.i18n.send_success : 'Sent.');
     }).fail(function () {
       showNotice($card, 'error', api.i18n && api.i18n.send_error ? api.i18n.send_error : 'Error.');
+    }).always(function () {
+      $btn.prop('disabled', false).removeClass('is-loading');
     });
   });
 
@@ -155,6 +186,13 @@
     var $grid = $btn.closest('.koopo-ticket-card').find('[data-guest-grid]');
     $grid.toggle();
     $btn.text($grid.is(':visible') ? 'Hide Guests' : 'Show Guests');
+  });
+
+  $(document).on('click', '.koopo-ticket-unassign', function () {
+    var $card = $(this).closest('.koopo-ticket-guest-card');
+    $card.find('.koopo-ticket-assigned').remove();
+    $card.find('.koopo-ticket-guest-editor').show();
+    $card.find('[data-guest-name], [data-guest-email], [data-guest-phone]').val('');
   });
 
   $(document).on('input', '.koopo-ticket-friend-search', function () {
@@ -195,6 +233,15 @@
     $card.find('[data-guest-email]').val($friend.data('email'));
     $card.find('[data-guest-results]').hide().empty();
     $card.find('.koopo-ticket-friend-spinner').hide();
+    $card.find('.koopo-ticket-guest-editor').hide();
+    $card.find('.koopo-ticket-assigned').remove();
+    var avatar = $friend.find('.koopo-ticket-friend-avatar').css('background-image');
+    var assigned = '<div class=\"koopo-ticket-assigned\">' +
+      '<span class=\"koopo-ticket-assigned-avatar\" style=\"background-image:' + avatar + '\"></span>' +
+      '<div><div class=\"koopo-ticket-assigned-name\">' + $friend.data('name') + '</div><div class=\"koopo-ticket-meta\">' + $friend.data('email') + '</div></div>' +
+      '<button type=\"button\" class=\"button koopo-ticket-unassign\">Remove</button>' +
+    '</div>';
+    $card.prepend(assigned);
   });
 
   $(function () {

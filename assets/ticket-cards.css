@@ -224,6 +224,25 @@ body.koopo-ticket--modal-open {
   justify-content: flex-end;
 }
 
+.koopo-ticket__footer .is-loading {
+  position: relative;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.koopo-ticket__footer .is-loading::after {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border: 2px solid #ddd;
+  border-top-color: #ff8c00;
+  border-radius: 50%;
+  display: inline-block;
+  margin-left: 8px;
+  animation: koopo-ticket-spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
 .koopo-ticket__summary {
   border: 1px solid #ececec;
   border-radius: 12px;

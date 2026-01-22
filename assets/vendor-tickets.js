@@ -166,6 +166,8 @@
 
       var id = $('#koopo-ticket-id').val();
       var endpoint = id ? ('ticket-types/' + id) : 'ticket-types';
+      var $submit = $('#koopo-ticket-submit');
+      $submit.prop('disabled', true).addClass('is-loading');
 
       request(endpoint, 'POST', payload).done(function () {
         $('#koopo-ticket-create')[0].reset();
@@ -179,6 +181,8 @@
         var msg = 'Could not save ticket type.';
         if (xhr && xhr.responseJSON && xhr.responseJSON.error) msg = xhr.responseJSON.error;
         showNotice('error', msg);
+      }).always(function () {
+        $submit.prop('disabled', false).removeClass('is-loading');
       });
     });
   }
@@ -188,8 +192,12 @@
       var id = $(this).data('id');
       if (!id) return;
       if (!window.confirm('Delete this ticket type?')) return;
+      var $btn = $(this);
+      $btn.prop('disabled', true).addClass('is-loading');
       request('ticket-types/' + id, 'DELETE').done(function () {
         loadTickets();
+      }).always(function () {
+        $btn.prop('disabled', false).removeClass('is-loading');
       });
     });
   }
