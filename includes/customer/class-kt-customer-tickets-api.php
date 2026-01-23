@@ -84,9 +84,14 @@ class Customer_Tickets_API {
         }
 
         $quantity = (int) $item->get_quantity();
-        $slots = self::build_attendee_slots($item, $quantity);
-
-        $ticket_status = self::map_ticket_status($order->get_status());
+        $rows = self::get_ticket_rows($item_id);
+        if (!empty($rows)) {
+          $slots = self::build_attendee_slots_from_rows($rows, $item);
+          $ticket_status = self::derive_ticket_status($rows);
+        } else {
+          $slots = self::build_attendee_slots($item, $quantity);
+          $ticket_status = self::map_ticket_status($order->get_status());
+        }
 
         $out[] = [
           'order_id' => $order->get_id(),
@@ -128,6 +133,7 @@ class Customer_Tickets_API {
     foreach ($guests as $guest) {
       if (!is_array($guest)) continue;
       $clean[] = [
+        'user_id' => absint($guest['user_id'] ?? 0),
         'name' => sanitize_text_field($guest['name'] ?? ''),
         'email' => sanitize_email($guest['email'] ?? ''),
         'phone' => sanitize_text_field($guest['phone'] ?? ''),
@@ -139,6 +145,8 @@ class Customer_Tickets_API {
     $item->update_meta_data('_koopo_ticket_guests', wp_json_encode($clean));
     $item->save();
 
+    self::sync_ticket_rows_with_guests($item, $clean);
+
     return new \WP_REST_Response(['success' => true], 200);
   }
 
@@ -147,26 +155,59 @@ class Customer_Tickets_API {
     $item = self::get_order_item_for_user($item_id);
     if (!$item) return new \WP_REST_Response(['error' => 'Ticket not found'], 404);
 
-    $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
-    $guests = $guests_raw ? json_decode($guests_raw, true) : [];
-    if (!is_array($guests) || empty($guests)) {
-      return new \WP_REST_Response(['error' => 'No guests to notify'], 400);
+    $ticket_id = absint($req->get_param('ticket_id'));
+    $guest_index = $req->get_param('guest_index');
+    $guest_index = $guest_index === null ? null : absint($guest_index);
+    $user_id = absint($req->get_param('user_id'));
+
+    $name = sanitize_text_field((string) $req->get_param('name'));
+    $email = sanitize_email((string) $req->get_param('email'));
+    $phone = sanitize_text_field((string) $req->get_param('phone'));
+
+    $ticket = null;
+    if ($ticket_id) {
+      $ticket = self::get_ticket_by_id_for_item($ticket_id, $item->get_id());
+    } elseif ($guest_index !== null) {
+      $ticket = self::get_ticket_by_index($item->get_id(), $guest_index + 2);
     }
 
-    foreach ($guests as $guest) {
-      $email = sanitize_email($guest['email'] ?? '');
-      if (!$email) continue;
-      $subject = __('Your ticket details', 'koopo-tickets');
-      $body = sprintf(
-        "%s\n\n%s: %s\n%s: %s\n",
-        __('You have been assigned a ticket.', 'koopo-tickets'),
-        __('Ticket', 'koopo-tickets'),
-        sanitize_text_field($guest['ticket_name'] ?? $item->get_name()),
-        __('Order', 'koopo-tickets'),
-        $item->get_order_id()
-      );
-      wp_mail($email, $subject, $body);
+    if ($user_id) {
+      $user = get_user_by('id', $user_id);
+      if ($user) {
+        $name = $user->display_name;
+        $email = $user->user_email;
+      }
     }
+
+    if (!$email && $ticket) {
+      $email = (string) $ticket->attendee_email;
+      $name = $name ?: (string) $ticket->attendee_name;
+      $phone = $phone ?: (string) $ticket->attendee_phone;
+    }
+
+    if (!$email) {
+      return new \WP_REST_Response(['error' => 'Guest email is required'], 400);
+    }
+
+    if ($ticket) {
+      self::update_ticket_recipient($ticket, [
+        'name' => $name,
+        'email' => $email,
+        'phone' => $phone,
+        'user_id' => $user_id,
+      ]);
+    }
+
+    $subject = __('Your ticket details', 'koopo-tickets');
+    $body = sprintf(
+      "%s\n\n%s: %s\n%s: %s\n",
+      __('You have been assigned a ticket.', 'koopo-tickets'),
+      __('Ticket', 'koopo-tickets'),
+      $item->get_name(),
+      __('Order', 'koopo-tickets'),
+      $item->get_order_id()
+    );
+    wp_mail($email, $subject, $body);
 
     return new \WP_REST_Response(['success' => true], 200);
   }
@@ -244,6 +285,68 @@ class Customer_Tickets_API {
     return $slots;
   }
 
+  private static function build_attendee_slots_from_rows(array $rows, \WC_Order_Item_Product $item): array {
+    $contact = [
+      'name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
+      'email' => (string) $item->get_meta('_koopo_ticket_contact_email'),
+      'phone' => (string) $item->get_meta('_koopo_ticket_contact_phone'),
+    ];
+
+    $slots = [];
+    foreach ($rows as $row) {
+      $slots[] = self::build_attendee_from_row($row, $contact);
+    }
+
+    return $slots;
+  }
+
+  private static function build_attendee_from_row(object $row, array $contact): array {
+    $name = sanitize_text_field($row->attendee_name ?? '');
+    $email = sanitize_email($row->attendee_email ?? '');
+    $phone = sanitize_text_field($row->attendee_phone ?? '');
+    if ((int) $row->attendee_index === 1 && !$name && !empty($contact['name'])) {
+      $name = $contact['name'];
+      $email = $email ?: $contact['email'];
+      $phone = $phone ?: $contact['phone'];
+    }
+
+    $label = $name ?: sprintf(__('Guest %d', 'koopo-tickets'), (int) $row->attendee_index);
+    if ((int) $row->attendee_index === 1) {
+      $label = $name ?: __('You', 'koopo-tickets');
+    }
+
+    $avatar = '';
+    $user_id = 0;
+    if ($email) {
+      $user = get_user_by('email', $email);
+      if ($user) {
+        $user_id = (int) $user->ID;
+      }
+      if ($user && function_exists('bp_core_fetch_avatar')) {
+        $avatar = bp_core_fetch_avatar([
+          'item_id' => $user->ID,
+          'type' => 'thumb',
+          'width' => 64,
+          'height' => 64,
+          'html' => false,
+        ]);
+      } else {
+        $avatar = get_avatar_url($email, ['size' => 64]);
+      }
+    }
+
+    return [
+      'ticket_id' => (int) $row->id,
+      'ticket_status' => (string) $row->status,
+      'label' => $label,
+      'name' => $name,
+      'email' => $email,
+      'phone' => $phone,
+      'avatar' => $avatar,
+      'user_id' => $user_id,
+    ];
+  }
+
   private static function build_attendee(array $data, string $fallback_label): array {
     $name = sanitize_text_field($data['name'] ?? '');
     $email = sanitize_email($data['email'] ?? '');
@@ -251,6 +354,7 @@ class Customer_Tickets_API {
     $label = $name ?: $fallback_label;
 
     $avatar = '';
+    $user = null;
     if ($email) {
       $user = get_user_by('email', $email);
       if ($user && function_exists('bp_core_fetch_avatar')) {
@@ -267,11 +371,14 @@ class Customer_Tickets_API {
     }
 
     return [
+      'ticket_id' => 0,
+      'ticket_status' => 'issued',
       'label' => $label,
       'name' => $name,
       'email' => $email,
       'phone' => $phone,
       'avatar' => $avatar,
+      'user_id' => $user ? (int) $user->ID : 0,
     ];
   }
 
@@ -288,6 +395,93 @@ class Customer_Tickets_API {
         return 'cancelled';
       default:
         return 'issued';
+    }
+  }
+
+  private static function get_ticket_rows(int $item_id): array {
+    global $wpdb;
+    $table = $wpdb->prefix . 'koopo_tickets';
+    return $wpdb->get_results(
+      $wpdb->prepare("SELECT * FROM {$table} WHERE order_item_id = %d ORDER BY attendee_index ASC", $item_id)
+    );
+  }
+
+  private static function get_ticket_by_index(int $item_id, int $attendee_index) {
+    global $wpdb;
+    $table = $wpdb->prefix . 'koopo_tickets';
+    return $wpdb->get_row(
+      $wpdb->prepare("SELECT * FROM {$table} WHERE order_item_id = %d AND attendee_index = %d LIMIT 1", $item_id, $attendee_index)
+    );
+  }
+
+  private static function get_ticket_by_id_for_item(int $ticket_id, int $item_id) {
+    global $wpdb;
+    $table = $wpdb->prefix . 'koopo_tickets';
+    return $wpdb->get_row(
+      $wpdb->prepare("SELECT * FROM {$table} WHERE id = %d AND order_item_id = %d LIMIT 1", $ticket_id, $item_id)
+    );
+  }
+
+  private static function derive_ticket_status(array $rows): string {
+    $statuses = array_map(fn($row) => (string) $row->status, $rows);
+    if (in_array('redeemed', $statuses, true)) return 'redeemed';
+    if (!empty($statuses) && count(array_unique($statuses)) === 1 && $statuses[0] === 'transferred') return 'transferred';
+    if (in_array('refunded', $statuses, true)) return 'refunded';
+    if (in_array('cancelled', $statuses, true)) return 'cancelled';
+    return 'issued';
+  }
+
+  private static function sync_ticket_rows_with_guests(\WC_Order_Item_Product $item, array $guests): void {
+    global $wpdb;
+    $table = $wpdb->prefix . 'koopo_tickets';
+
+    foreach ($guests as $index => $guest) {
+      $attendee_index = $index + 2;
+      $name = sanitize_text_field($guest['name'] ?? '');
+      $email = sanitize_email($guest['email'] ?? '');
+      $phone = sanitize_text_field($guest['phone'] ?? '');
+      $wpdb->update($table, [
+        'attendee_name' => $name,
+        'attendee_email' => $email,
+        'attendee_phone' => $phone,
+        'updated_at' => gmdate('Y-m-d H:i:s'),
+      ], [
+        'order_item_id' => $item->get_id(),
+        'attendee_index' => $attendee_index,
+      ], ['%s', '%s', '%s', '%s'], ['%d', '%d']);
+    }
+  }
+
+  private static function update_ticket_recipient(object $ticket, array $data): void {
+    global $wpdb;
+    $table = $wpdb->prefix . 'koopo_tickets';
+    $status = $ticket->status;
+    if (!empty($data['user_id'])) {
+      $status = 'transferred';
+    }
+
+    $wpdb->update($table, [
+      'attendee_name' => $data['name'] ?? '',
+      'attendee_email' => $data['email'] ?? '',
+      'attendee_phone' => $data['phone'] ?? '',
+      'status' => $status,
+      'updated_at' => gmdate('Y-m-d H:i:s'),
+    ], ['id' => (int) $ticket->id], ['%s', '%s', '%s', '%s', '%s'], ['%d']);
+
+    $item = new \WC_Order_Item_Product($ticket->order_item_id);
+    if ($item && $item->get_id() && (int) $ticket->attendee_index > 1) {
+      $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
+      $guests = $guests_raw ? json_decode($guests_raw, true) : [];
+      if (!is_array($guests)) $guests = [];
+      $guest_index = max(0, (int) $ticket->attendee_index - 2);
+      $guests[$guest_index] = [
+        'user_id' => absint($data['user_id'] ?? 0),
+        'name' => $data['name'] ?? '',
+        'email' => $data['email'] ?? '',
+        'phone' => $data['phone'] ?? '',
+      ];
+      $item->update_meta_data('_koopo_ticket_guests', wp_json_encode($guests));
+      $item->save();
     }
   }
 }

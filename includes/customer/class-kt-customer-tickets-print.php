@@ -101,7 +101,7 @@ class Customer_Tickets_Print {
           'email' => (string) $row->attendee_email,
           'phone' => (string) $row->attendee_phone,
           'code' => (string) $row->code,
-          'qr_data' => 'KTID:' . (int) $row->id,
+          'qr_data' => (string) (int) $row->id,
         ];
       }
       return $codes;

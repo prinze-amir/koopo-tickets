@@ -25,7 +25,21 @@
       $out.text(data || 'Unable to verify ticket.').css('color', '#7a1e1e');
       return;
     }
-    var text = 'Status: ' + data.status + ' | Attendee: ' + (data.attendee_name || '—') + ' | Event ID: ' + data.event_id;
+    var parts = [];
+    parts.push('Status: ' + data.status);
+    parts.push('Attendee: ' + (data.attendee_name || '—'));
+    if (data.event_title) {
+      parts.push('Event: ' + data.event_title);
+    } else if (data.event_id) {
+      parts.push('Event ID: ' + data.event_id);
+    }
+    if (data.schedule_date || data.schedule_time) {
+      parts.push('Date/Time: ' + [data.schedule_date, data.schedule_time].filter(Boolean).join(' '));
+    }
+    if (data.seat) {
+      parts.push('Seat: ' + data.seat);
+    }
+    var text = parts.join(' | ');
     $out.text(text).css('color', '#222');
   }
 

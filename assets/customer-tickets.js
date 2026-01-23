@@ -55,7 +55,7 @@
         guestsHtml +
         '<div class="koopo-ticket-actions">' +
           (item.quantity > 1 ? '<button class="button koopo-ticket-save">Save Guests</button>' : '') +
-          '<button class="button koopo-ticket-send">Send Tickets</button>' +
+          (item.quantity > 1 ? '<button class="button koopo-ticket-send-toggle">Send Tickets</button>' : '') +
           '<a class="button" target="_blank" href="?koopo_ticket_print=' + item.item_id + '">View/Print Tickets</a>' +
           '<a class="button" target="_blank" href="?koopo_ticket_print=' + item.item_id + '&download=1">Download</a>' +
         '</div>' +
@@ -74,11 +74,12 @@
     for (var i = 0; i < item.quantity - 1; i += 1) {
       var guest = guests[i] || {};
       var attendee = attendees[i + 1] || {};
-      var assigned = (attendee.email || attendee.name);
+      var assigned = (attendee.user_id || guest.user_id);
       html += '<div class="koopo-ticket-guest-card" data-guest-index="' + i + '">' +
         '<h4>Guest ' + (i + 1) + '</h4>' +
         buildAssignedGuest(attendee, assigned) +
-        buildGuestEditor(guest, assigned) +
+        buildGuestEditor(guest, attendee, assigned) +
+        buildGuestSendActions(attendee, assigned) +
       '</div>';
     }
 
@@ -92,21 +93,34 @@
     var email = attendee.email ? '<div class="koopo-ticket-meta">' + attendee.email + '</div>' : '';
     return '<div class="koopo-ticket-assigned">' +
       avatar +
-      '<div><div class="koopo-ticket-assigned-name">' + name + '</div>' + email + '</div>' +
+      '<div><div class="koopo-ticket-assigned-label">Assigned to</div><div class="koopo-ticket-assigned-name">' + name + '</div>' + email + '</div>' +
       '<button type="button" class="button koopo-ticket-unassign">Remove</button>' +
     '</div>';
   }
 
-  function buildGuestEditor(guest, assigned) {
+  function buildGuestEditor(guest, attendee, assigned) {
     var style = assigned ? 'style="display:none;"' : '';
+    var userId = guest.user_id || attendee.user_id || 0;
+    var name = guest.name || attendee.name || '';
+    var email = guest.email || attendee.email || '';
+    var phone = guest.phone || attendee.phone || '';
     return '<div class="koopo-ticket-guest-editor" ' + style + '>' +
-      '<label>Assign from friends</label>' +
+      '<label>Assign to user</label>' +
       '<input type="text" class="koopo-ticket-friend-search" placeholder="Search friends..." data-guest-search>' +
       '<div class="koopo-ticket-friend-spinner"></div>' +
       '<div class="koopo-ticket-friend-results" data-guest-results style="display:none;"></div>' +
-      '<label>Name</label><input type="text" data-guest-name value="' + (guest.name || '') + '">' +
-      '<label>Email</label><input type="email" data-guest-email value="' + (guest.email || '') + '">' +
-      '<label>Phone</label><input type="tel" data-guest-phone value="' + (guest.phone || '') + '">' +
+      '<input type="hidden" data-guest-user-id value="' + userId + '">' +
+      '<label>Name</label><input type="text" data-guest-name value="' + name + '">' +
+      '<label>Email</label><input type="email" data-guest-email value="' + email + '">' +
+      '<label>Phone</label><input type="tel" data-guest-phone value="' + phone + '">' +
+    '</div>';
+  }
+
+  function buildGuestSendActions(attendee, assigned) {
+    var ticketId = attendee.ticket_id || 0;
+    var label = assigned ? 'Transfer Ticket' : 'Send Ticket';
+    return '<div class="koopo-ticket-guest-actions">' +
+      '<button class="button koopo-ticket-guest-send" data-ticket-id="' + ticketId + '">' + label + '</button>' +
     '</div>';
   }
 
@@ -126,6 +140,7 @@
     $card.find('.koopo-ticket-guest-card').each(function () {
       var $guest = $(this);
       guests.push({
+        user_id: parseInt($guest.find('[data-guest-user-id]').val(), 10) || 0,
         name: $guest.find('[data-guest-name]').val(),
         email: $guest.find('[data-guest-email]').val(),
         phone: $guest.find('[data-guest-phone]').val()
@@ -166,16 +181,37 @@
     });
   });
 
-  $(document).on('click', '.koopo-ticket-send', function () {
+  $(document).on('click', '.koopo-ticket-send-toggle', function () {
     var $card = $(this).closest('.koopo-ticket-card');
+    var $grid = $card.find('[data-guest-grid]');
+    if (!$grid.length) return;
+    $grid.show();
+  });
+
+  $(document).on('click', '.koopo-ticket-guest-send', function () {
+    var $card = $(this).closest('.koopo-ticket-card');
+    var $guest = $(this).closest('.koopo-ticket-guest-card');
     var itemId = $card.data('item-id');
     var $btn = $(this);
+    var ticketId = parseInt($btn.data('ticket-id'), 10) || 0;
+    var guestIndex = parseInt($guest.data('guest-index'), 10) || 0;
+    var payload = {
+      ticket_id: ticketId,
+      guest_index: guestIndex,
+      user_id: parseInt($guest.find('[data-guest-user-id]').val(), 10) || 0,
+      name: $guest.find('[data-guest-name]').val(),
+      email: $guest.find('[data-guest-email]').val(),
+      phone: $guest.find('[data-guest-phone]').val()
+    };
     $btn.prop('disabled', true).addClass('is-loading');
 
-    request('customer/tickets/' + itemId + '/send', 'POST').done(function () {
+    request('customer/tickets/' + itemId + '/send', 'POST', payload).done(function () {
       showNotice($card, 'success', api.i18n && api.i18n.send_success ? api.i18n.send_success : 'Sent.');
-    }).fail(function () {
-      showNotice($card, 'error', api.i18n && api.i18n.send_error ? api.i18n.send_error : 'Error.');
+      loadTickets();
+    }).fail(function (xhr) {
+      var msg = api.i18n && api.i18n.send_error ? api.i18n.send_error : 'Error.';
+      if (xhr.responseJSON && xhr.responseJSON.error) msg = xhr.responseJSON.error;
+      showNotice($card, 'error', msg);
     }).always(function () {
       $btn.prop('disabled', false).removeClass('is-loading');
     });
@@ -193,6 +229,8 @@
     $card.find('.koopo-ticket-assigned').remove();
     $card.find('.koopo-ticket-guest-editor').show();
     $card.find('[data-guest-name], [data-guest-email], [data-guest-phone]').val('');
+    $card.find('[data-guest-user-id]').val('');
+    $card.find('.koopo-ticket-guest-send').text('Send Ticket');
   });
 
   $(document).on('input', '.koopo-ticket-friend-search', function () {
@@ -215,7 +253,7 @@
       }
 
       var html = items.map(function (friend) {
-        return '<div class="koopo-ticket-friend" data-name="' + friend.name + '" data-email="' + friend.email + '">' +
+        return '<div class="koopo-ticket-friend" data-name="' + friend.name + '" data-email="' + friend.email + '" data-user-id="' + friend.id + '">' +
           '<span class="koopo-ticket-friend-avatar" style="background-image:url(' + friend.avatar + ')"></span>' +
           '<span>' + friend.name + ' (' + friend.email + ')</span>' +
         '</div>';
@@ -231,6 +269,7 @@
     var $card = $friend.closest('.koopo-ticket-guest-card');
     $card.find('[data-guest-name]').val($friend.data('name'));
     $card.find('[data-guest-email]').val($friend.data('email'));
+    $card.find('[data-guest-user-id]').val($friend.data('user-id'));
     $card.find('[data-guest-results]').hide().empty();
     $card.find('.koopo-ticket-friend-spinner').hide();
     $card.find('.koopo-ticket-guest-editor').hide();
@@ -238,10 +277,11 @@
     var avatar = $friend.find('.koopo-ticket-friend-avatar').css('background-image');
     var assigned = '<div class=\"koopo-ticket-assigned\">' +
       '<span class=\"koopo-ticket-assigned-avatar\" style=\"background-image:' + avatar + '\"></span>' +
-      '<div><div class=\"koopo-ticket-assigned-name\">' + $friend.data('name') + '</div><div class=\"koopo-ticket-meta\">' + $friend.data('email') + '</div></div>' +
+      '<div><div class=\"koopo-ticket-assigned-label\">Assigned to</div><div class=\"koopo-ticket-assigned-name\">' + $friend.data('name') + '</div><div class=\"koopo-ticket-meta\">' + $friend.data('email') + '</div></div>' +
       '<button type=\"button\" class=\"button koopo-ticket-unassign\">Remove</button>' +
     '</div>';
     $card.prepend(assigned);
+    $card.find('.koopo-ticket-guest-send').text('Transfer Ticket');
   });
 
   $(function () {

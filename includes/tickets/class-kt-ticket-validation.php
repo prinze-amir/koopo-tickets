@@ -89,16 +89,53 @@ class Ticket_Validation {
   }
 
   private static function format_ticket($ticket): array {
+    $event_title = $ticket->event_id ? get_the_title($ticket->event_id) : '';
+    $schedule_label = (string) $ticket->schedule_label;
+    $schedule_date = '';
+    $schedule_time = '';
+    $seat = '';
+    if ($ticket->schedule_id && class_exists('GeoDir_Event_Schedules')) {
+      $schedule = \GeoDir_Event_Schedules::get_schedule((int) $ticket->schedule_id);
+      if ($schedule && !empty($schedule->start_date)) {
+        $date_format = function_exists('geodir_event_date_format') ? geodir_event_date_format() : 'Y-m-d';
+        $time_format = function_exists('geodir_event_time_format') ? geodir_event_time_format() : 'H:i';
+        $schedule_date = date_i18n($date_format, strtotime($schedule->start_date));
+        if (!empty($schedule->all_day)) {
+          $schedule_time = __('All day', 'koopo-tickets');
+        } else {
+          $start_time = $schedule->start_time ?? '00:00:00';
+          $end_time = $schedule->end_time ?? '';
+          $schedule_time = date_i18n($time_format, strtotime($start_time));
+          if ($end_time) {
+            $schedule_time .= ' - ' . date_i18n($time_format, strtotime($end_time));
+          }
+        }
+      }
+    }
+    if ($ticket->order_item_id) {
+      $order_item = new \WC_Order_Item_Product((int) $ticket->order_item_id);
+      if ($order_item && $order_item->get_id()) {
+        $seat = (string) $order_item->get_meta('_koopo_ticket_seat');
+        if (!$seat) {
+          $seat = (string) $order_item->get_meta('_koopo_ticket_seat_label');
+        }
+      }
+    }
+
     return [
       'id' => (int) $ticket->id,
       'code' => (string) $ticket->code,
       'status' => (string) $ticket->status,
       'event_id' => (int) $ticket->event_id,
+      'event_title' => (string) $event_title,
       'ticket_type_id' => (int) $ticket->ticket_type_id,
       'attendee_name' => (string) $ticket->attendee_name,
       'attendee_email' => (string) $ticket->attendee_email,
       'attendee_phone' => (string) $ticket->attendee_phone,
-      'schedule_label' => (string) $ticket->schedule_label,
+      'schedule_label' => $schedule_label,
+      'schedule_date' => $schedule_date,
+      'schedule_time' => $schedule_time,
+      'seat' => $seat,
       'order_id' => (int) $ticket->order_id,
       'order_item_id' => (int) $ticket->order_item_id,
     ];
