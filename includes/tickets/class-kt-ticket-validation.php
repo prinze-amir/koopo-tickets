@@ -31,7 +31,7 @@ class Ticket_Validation {
     $code = sanitize_text_field((string) $req->get_param('code'));
     if (!$code) return new \WP_REST_Response(['error' => 'code is required'], 400);
 
-    $ticket = self::get_ticket_by_code($code);
+    $ticket = self::resolve_ticket($code);
     if (!$ticket) return new \WP_REST_Response(['error' => 'Ticket not found'], 404);
 
     return new \WP_REST_Response(self::format_ticket($ticket), 200);
@@ -41,7 +41,7 @@ class Ticket_Validation {
     $code = sanitize_text_field((string) $req->get_param('code'));
     if (!$code) return new \WP_REST_Response(['error' => 'code is required'], 400);
 
-    $ticket = self::get_ticket_by_code($code);
+    $ticket = self::resolve_ticket($code);
     if (!$ticket) return new \WP_REST_Response(['error' => 'Ticket not found'], 404);
 
     if ($ticket->status === 'redeemed') {
@@ -58,6 +58,25 @@ class Ticket_Validation {
     global $wpdb;
     $table = $wpdb->prefix . 'koopo_tickets';
     return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE code = %s LIMIT 1", $code));
+  }
+
+  private static function get_ticket_by_id(int $id) {
+    global $wpdb;
+    $table = $wpdb->prefix . 'koopo_tickets';
+    return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id = %d LIMIT 1", $id));
+  }
+
+  private static function resolve_ticket(string $payload) {
+    if (strpos($payload, 'KTID:') === 0) {
+      $id = absint(substr($payload, 5));
+      return $id ? self::get_ticket_by_id($id) : null;
+    }
+    if (ctype_digit($payload)) {
+      $id = absint($payload);
+      $ticket = self::get_ticket_by_id($id);
+      if ($ticket) return $ticket;
+    }
+    return self::get_ticket_by_code($payload);
   }
 
   private static function update_ticket_status(int $ticket_id, string $status): void {

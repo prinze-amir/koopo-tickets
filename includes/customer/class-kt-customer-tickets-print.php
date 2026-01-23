@@ -96,10 +96,12 @@ class Customer_Tickets_Print {
           $label = $contact['name'];
         }
         $codes[] = [
+          'id' => (int) $row->id,
           'label' => $label,
           'email' => (string) $row->attendee_email,
           'phone' => (string) $row->attendee_phone,
           'code' => (string) $row->code,
+          'qr_data' => 'KTID:' . (int) $row->id,
         ];
       }
       return $codes;
@@ -112,20 +114,24 @@ class Customer_Tickets_Print {
 
     $codes = [];
     $codes[] = [
+      'id' => 0,
       'label' => $contact['name'] ?: __('You', 'koopo-tickets'),
       'email' => $contact['email'],
       'phone' => $contact['phone'],
       'code' => self::build_code($item->get_id(), 1),
+      'qr_data' => self::build_code($item->get_id(), 1),
     ];
 
     for ($i = 0; $i < max(0, $quantity - 1); $i++) {
       $guest = $guests[$i] ?? [];
       $label = sanitize_text_field($guest['name'] ?? '') ?: sprintf(__('Guest %d', 'koopo-tickets'), $i + 1);
       $codes[] = [
+        'id' => 0,
         'label' => $label,
         'email' => sanitize_email($guest['email'] ?? ''),
         'phone' => sanitize_text_field($guest['phone'] ?? ''),
         'code' => self::build_code($item->get_id(), $i + 2),
+        'qr_data' => self::build_code($item->get_id(), $i + 2),
       ];
     }
 
@@ -148,14 +154,41 @@ class Customer_Tickets_Print {
 
     $svgs = [];
     foreach ($codes as $entry) {
-      $qr = new \geodir_tickets\QRCode();
-      $qr->addData($entry['code']);
-      $qr->make();
-      ob_start();
-      $qr->printSVG(3);
-      $svgs[] = ob_get_clean();
+      $payload = isset($entry['qr_data']) ? (string) $entry['qr_data'] : (string) $entry['code'];
+      $qr_svg = self::generate_qr_svg($payload);
+      $svgs[] = $qr_svg;
     }
 
     return $svgs;
+  }
+
+  private static function generate_qr_svg(string $data): string {
+    $levels = [QR_ERROR_CORRECT_LEVEL_L, QR_ERROR_CORRECT_LEVEL_M, QR_ERROR_CORRECT_LEVEL_Q, QR_ERROR_CORRECT_LEVEL_H];
+    $type = 2;
+
+    foreach ($levels as $level) {
+      for ($i = $type; $i <= 10; $i++) {
+        $prev = null;
+        try {
+          $prev = set_error_handler(function ($severity, $message) {
+            throw new \RuntimeException($message, $severity);
+          });
+          $qr = new \geodir_tickets\QRCode();
+          $qr->setTypeNumber($i);
+          $qr->setErrorCorrectLevel($level);
+          $qr->addData($data);
+          $qr->make();
+          ob_start();
+          $qr->printSVG(3);
+          if ($prev) set_error_handler($prev);
+          return ob_get_clean();
+        } catch (\Throwable $e) {
+          if ($prev) set_error_handler($prev);
+          continue;
+        }
+      }
+    }
+
+    return '';
   }
 }
