@@ -2,18 +2,18 @@
 /**
  * Plugin Name: Koopo Tickets
  * Description: Ticketing engine for Koopo Online with WooCommerce/Dokan integration.
- * Version: 0.1.0
+ * Version: 0.2.0
  * Author: Koopo
  */
 
 defined('ABSPATH') || exit;
 
-define('KOOPO_TICKETS_VERSION', '0.1.0');
+define('KOOPO_TICKETS_VERSION', '0.2.0');
 define('KOOPO_TICKETS_PATH', plugin_dir_path(__FILE__));
 define('KOOPO_TICKETS_URL', plugin_dir_url(__FILE__));
 
 final class Koopo_Tickets {
-  const VERSION = '0.1.0';
+  const VERSION = '0.2.0';
   const SLUG = 'koopo-tickets';
 
   private static $instance = null;

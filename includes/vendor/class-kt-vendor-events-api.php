@@ -63,6 +63,8 @@ class Vendor_Events_API {
         'id' => (int) $id,
         'title' => get_the_title($id),
         'type' => get_post_type($id),
+        'thumbnail' => (string) get_the_post_thumbnail_url($id, 'medium'),
+        'dates_count' => count($dates),
         'dates' => $dates,
       ];
     }

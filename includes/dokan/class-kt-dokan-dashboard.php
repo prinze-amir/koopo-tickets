@@ -26,7 +26,7 @@ class Dokan_Dashboard {
       'title' => __('Tickets', 'koopo-tickets'),
       'icon' => '<i class="fas fa-ticket-alt"></i>',
       'url' => dokan_get_navigation_url('koopo-tickets'),
-      'pos' => 56,
+      'pos' => 3,
       'icon_name' => 'Ticket',
     ];
 

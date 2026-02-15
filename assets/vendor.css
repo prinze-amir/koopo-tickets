@@ -6,6 +6,71 @@
   margin: 0 0 18px;
 }
 
+.koopo-ticket-workspace-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+#koopo-event-back-mobile {
+  display: none;
+  margin-bottom: 8px;
+}
+
+.koopo-event-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.koopo-event-card {
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.koopo-event-card:hover,
+.koopo-event-card:focus {
+  border-color: #3a7bd5;
+  box-shadow: 0 2px 10px rgba(22, 39, 67, 0.1);
+}
+
+.koopo-event-card.is-selected {
+  border-color: #1f5fbf;
+  box-shadow: 0 0 0 2px rgba(31, 95, 191, 0.2);
+}
+
+.koopo-event-card__thumb {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  background: linear-gradient(135deg, #eceff5, #dce2eb);
+  display: block;
+}
+
+.koopo-event-card__body {
+  padding: 10px 12px;
+}
+
+.koopo-event-card__title {
+  margin: 0 0 5px;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.koopo-event-card__meta {
+  margin: 0;
+  color: #666;
+  font-size: 12px;
+}
+
 .koopo-tickets-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -35,6 +100,7 @@
   gap: 10px;
   align-items: center;
   margin-top: 12px;
+  flex-wrap: wrap;
 }
 
 .koopo-tickets-actions .is-loading {
@@ -129,11 +195,11 @@
 }
 
 .koopo-ticket-date-prices__list {
-    margin-top: 8px;
-    display: flex;
-    flex-direction: row;
-    gap: 20px;
-    flex-wrap: wrap;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
 .koopo-ticket-date-prices__controls {
@@ -149,11 +215,11 @@
 }
 
 .koopo-ticket-date-price {
-    border: solid 1px #eee;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    padding: 10px;
+  border: solid 1px #eee;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px;
 }
 
 .koopo-ticket-date-label {
@@ -279,4 +345,119 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.koopo-ticket-form-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 25, 33, 0.55);
+  z-index: 9999;
+  padding: 18px;
+  overflow: auto;
+  display:flex;
+  justify-content: center;
+}
+
+body.koopo-ticket-modal-open {
+  overflow: hidden;
+}
+
+.koopo-ticket-form-dialog {
+  width: min(860px, 100%);
+  margin-top: 6%;
+  background: #fff;
+  border-radius: 12px;
+  padding: 18px;
+  position: relative;
+  height:fit-content;
+}
+
+.koopo-ticket-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.koopo-ticket-modal-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 16px;
+}
+
+.koopo-ticket-modal-steps span {
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  text-align: center;
+  padding: 7px 8px;
+  font-size: 12px;
+  color: #666;
+}
+
+.koopo-ticket-modal-steps span.is-active {
+  border-color: #1f5fbf;
+  background: #eef4ff;
+  color: #1f5fbf;
+  font-weight: 600;
+}
+
+.koopo-ticket-step {
+  display: none;
+}
+
+.koopo-ticket-step.is-active {
+  display: block;
+}
+
+.koopo-ticket-scan-panel {
+  margin-top: 12px;
+  border: 1px solid #e7e7e7;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fafafa;
+}
+
+#koopo-ticket-scan-video {
+  width: 100%;
+  max-height: 320px;
+  border-radius: 8px;
+  background: #111;
+}
+
+#koopo-ticket-camera-select {
+  min-width: 220px;
+}
+
+@media (max-width: 700px) {
+  .koopo-ticket-form-dialog {
+    padding: 14px;
+  }
+
+  .koopo-ticket-modal-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .koopo-ticket-date-prices__controls {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 767px) {
+  #koopo-event-back-mobile {
+    display: inline-flex;
+  }
+
+  #koopo-ticket-dashboard.koopo-mobile-event-selected #koopo-event-selector-card {
+    display: none;
+  }
+}
+
+@keyframes koopo-ticket-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
