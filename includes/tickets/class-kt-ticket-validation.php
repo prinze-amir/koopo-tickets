@@ -112,6 +112,24 @@ class Ticket_Validation {
         }
       }
     }
+    if (!$schedule_date && !$schedule_time && !empty($ticket->event_id)) {
+      if (!empty($ticket->schedule_id)) {
+        $option = WC_Cart::get_event_date_option((int) $ticket->event_id, (int) $ticket->schedule_id);
+        $schedule_date = $option['date'] ?? '';
+        $schedule_time = $option['time'] ?? '';
+        if (!$schedule_label && !empty($option['label'])) {
+          $schedule_label = $option['label'];
+        }
+      }
+      if (!$schedule_date && !$schedule_time) {
+        $event_dt = WC_Cart::get_event_datetime((int) $ticket->event_id);
+        $schedule_date = $event_dt['date'] ?? '';
+        $schedule_time = $event_dt['time'] ?? '';
+        if (!$schedule_label && !empty($event_dt['label'])) {
+          $schedule_label = $event_dt['label'];
+        }
+      }
+    }
     if ($ticket->order_item_id) {
       $order_item = new \WC_Order_Item_Product((int) $ticket->order_item_id);
       if ($order_item && $order_item->get_id()) {

@@ -64,8 +64,12 @@ $logo = $print_data['logo'] ?? '';
       <?php endforeach; ?>
     </div>
   </div>
-  <?php wp_footer(); ?>
-  <?php if (!empty($_GET['download'])) : ?>
+<?php wp_footer(); ?>
+  <?php
+    $kt_action = sanitize_text_field(wp_unslash($_GET['kt_action'] ?? ''));
+    $auto_print = in_array($kt_action, ['print', 'download'], true) || !empty($_GET['download']) || !empty($_GET['print']);
+  ?>
+  <?php if ($auto_print) : ?>
     <script>
       window.addEventListener('load', function () {
         window.print();

@@ -88,6 +88,7 @@ class Ticket_Cards {
         'stock_qty' => $stock_qty,
         'in_stock' => $variation->is_in_stock(),
         'max_per_order' => $ticket_type_id ? (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_MAX_PER_ORDER, true) : 0,
+        'date_prices' => $ticket_type_id ? get_post_meta($ticket_type_id, Ticket_Types_API::META_DATE_PRICES, true) : [],
       ];
     }
 
@@ -101,16 +102,18 @@ class Ticket_Cards {
       $classes = ['koopo-ticket-card'];
       if (!$option['in_stock']) $classes[] = 'is-soldout';
       $max_text = $option['max_per_order'] ? sprintf(__('Max %d per order', 'koopo-tickets'), $option['max_per_order']) : __('No limit', 'koopo-tickets');
+      $soldout = !$option['in_stock'] ? '<span class="koopo-ticket-soldout">' . esc_html__('Sold Out', 'koopo-tickets') . '</span>' : '';
 
       $cards[] = sprintf(
         '<div class="%s">' .
-          '<h4>%s</h4>' .
+          '<h4>%s %s</h4>' .
           '<p class="koopo-ticket-price">%s</p>' .
           '<p class="koopo-ticket-meta">%s</p>' .
           '<p class="koopo-ticket-meta">%s</p>' .
         '</div>',
         esc_attr(implode(' ', $classes)),
         esc_html($option['name']),
+        $soldout,
         $option['price_html'] ?: esc_html__('Free', 'koopo-tickets'),
         esc_html($option['stock_qty'] !== null ? sprintf(__('Remaining: %d', 'koopo-tickets'), (int) $option['stock_qty']) : __('Availability varies', 'koopo-tickets')),
         esc_html($max_text)
@@ -130,11 +133,15 @@ class Ticket_Cards {
     foreach ($options as $option) {
       $disabled = $option['in_stock'] ? '' : 'disabled';
       $max_attr = $option['max_per_order'] ? 'data-max="' . esc_attr($option['max_per_order']) . '"' : '';
+      $date_prices = is_array($option['date_prices'] ?? null) ? $option['date_prices'] : [];
+      $price_map = esc_attr(wp_json_encode($date_prices ?: new \stdClass()));
+      $soldout = !$option['in_stock'] ? '<span class="koopo-ticket-soldout">' . esc_html__('Sold Out', 'koopo-tickets') . '</span>' : '';
       $ticket_items .= sprintf(
-        '<div class="koopo-ticket__item" data-variation-id="%d" data-ticket-type-id="%d" data-name="%s" data-price="%s" %s>' .
+        '<div class="koopo-ticket__item" data-variation-id="%d" data-ticket-type-id="%d" data-name="%s" data-price="%s" data-price-base="%s" data-price-map="%s" %s>' .
           '<div>' .
             '<h5>%s</h5>' .
-            '<div class="koopo-ticket-meta">%s</div>' .
+            '<div class="koopo-ticket-meta" data-price-label>%s</div>' .
+            '%s' .
           '</div>' .
           '<div class="koopo-ticket__qty">' .
             '<input type="number" min="0" value="0" %s>' .
@@ -144,9 +151,12 @@ class Ticket_Cards {
         (int) $option['ticket_type_id'],
         esc_attr($option['name']),
         esc_attr($option['price']),
+        esc_attr($option['price']),
+        $price_map,
         $max_attr,
         esc_html($option['name']),
         $option['price_html'] ?: esc_html__('Free', 'koopo-tickets'),
+        $soldout,
         $disabled
       );
     }
@@ -197,7 +207,8 @@ class Ticket_Cards {
               '<label>%s</label>' .
               '<input type="tel" name="koopo_ticket_contact_phone" value="%s">' .
             '</div>' .
-            '<div class="koopo-ticket__guest-grid" data-guest-grid></div>' .
+            '<button type="button" class="koopo-ticket__guest-toggle" data-guest-toggle>%s</button>' .
+            '<div class="koopo-ticket__guest-grid" data-guest-grid style="display:none;"></div>' .
             '<div class="koopo-ticket__footer">' .
               '<button class="button koopo-ticket-back" type="button">%s</button>' .
               '<button class="button koopo-ticket-next" type="button">%s</button>' .
@@ -229,6 +240,7 @@ class Ticket_Cards {
       esc_attr($user_email),
       esc_html__('Contact Phone', 'koopo-tickets'),
       esc_attr($user_phone),
+      esc_html__('Add guest info (optional)', 'koopo-tickets'),
       esc_html__('Back', 'koopo-tickets'),
       esc_html__('Next', 'koopo-tickets'),
       esc_html__('Back', 'koopo-tickets'),
@@ -240,27 +252,42 @@ class Ticket_Cards {
     if (empty($schedules)) return '';
 
     if (count($schedules) === 1) {
-      $label = self::format_schedule_label($schedules[0]);
-      return '<input type="hidden" name="koopo_ticket_schedule_id" value="' . esc_attr($schedules[0]->schedule_id) . '">' .
+      $label = self::schedule_label($schedules[0]);
+      $id = self::schedule_id($schedules[0]);
+      return '<input type="hidden" name="koopo_ticket_schedule_id" value="' . esc_attr($id) . '">' .
         '<input type="hidden" name="koopo_ticket_schedule_label" value="' . esc_attr($label) . '">' .
         '<p class="koopo-ticket-meta">' . esc_html($label) . '</p>';
     }
 
-    $options = '';
+    $entries = [];
     foreach ($schedules as $schedule) {
-      $label = self::format_schedule_label($schedule);
-      $options .= '<option value="' . esc_attr($schedule->schedule_id) . '" data-label="' . esc_attr($label) . '">' . esc_html($label) . '</option>';
+      $entries[] = [
+        'schedule_id' => self::schedule_id($schedule),
+        'label' => self::schedule_label($schedule),
+        'date' => is_array($schedule) ? (string) ($schedule['date'] ?? '') : '',
+        'time' => is_array($schedule) ? (string) ($schedule['time'] ?? '') : '',
+        'start_ts' => is_array($schedule) ? (int) ($schedule['start_ts'] ?? 0) : 0,
+      ];
     }
 
-    return '<div class="koopo-ticket__field">' .
+    return '<div class="koopo-ticket__field koopo-ticket__field--schedule" data-schedule-picker data-schedules="' . esc_attr(wp_json_encode($entries)) . '">' .
       '<label>' . esc_html__('Event Date', 'koopo-tickets') . '</label>' .
-      '<select name="koopo_ticket_schedule_id" class="koopo-ticket-schedule-select">' . $options . '</select>' .
-      '<input type="hidden" name="koopo_ticket_schedule_label" value="' . esc_attr(self::format_schedule_label($schedules[0])) . '">' .
+      '<div class="koopo-ticket-datepicker" data-schedule-calendar></div>' .
+      '<div class="koopo-ticket-time-list" data-schedule-times></div>' .
+      '<input type="hidden" name="koopo_ticket_schedule_id" value="">' .
+      '<input type="hidden" name="koopo_ticket_schedule_label" value="">' .
     '</div>';
   }
 
   private static function get_event_schedules(int $event_id): array {
-    if (!$event_id || !class_exists('GeoDir_Event_Schedules')) return [];
+    if (!$event_id) return [];
+
+    $event_dates = WC_Cart::get_event_date_options($event_id);
+    if (!empty($event_dates)) {
+      return $event_dates;
+    }
+
+    if (!class_exists('GeoDir_Event_Schedules')) return [];
     $schedules = \GeoDir_Event_Schedules::get_schedules($event_id, 'upcoming');
     if (empty($schedules)) return [];
 
@@ -292,6 +319,20 @@ class Ticket_Cards {
     }
 
     return $label;
+  }
+
+  private static function schedule_id($schedule): int {
+    if (is_array($schedule)) {
+      return absint($schedule['schedule_id'] ?? 0);
+    }
+    return absint($schedule->schedule_id ?? 0);
+  }
+
+  private static function schedule_label($schedule): string {
+    if (is_array($schedule)) {
+      if (!empty($schedule['label'])) return (string) $schedule['label'];
+    }
+    return self::format_schedule_label($schedule);
   }
 
   private static function infer_event_id(): int {

@@ -17,6 +17,8 @@ class Ticket_Types_API {
   const META_PRODUCT_ID = '_koopo_wc_product_id';
   const META_VARIATION_ID = '_koopo_wc_variation_id';
   const META_MAX_PER_ORDER = '_koopo_ticket_max_per_order';
+  const META_DATE_PRICES = '_koopo_ticket_date_prices';
+  const META_UNLIMITED_CAPACITY = '_koopo_ticket_unlimited_capacity';
 
   public static function init() {
     add_action('rest_api_init', [__CLASS__, 'routes']);
@@ -117,6 +119,8 @@ class Ticket_Types_API {
       'sales_start' => $sales_start,
       'sales_end' => $sales_end,
       'max_per_order' => $max_per_order,
+      'date_prices' => $req->get_param('date_prices'),
+      'unlimited_capacity' => $req->get_param('unlimited_capacity'),
     ]);
     if ($validation) return $validation;
 
@@ -135,6 +139,7 @@ class Ticket_Types_API {
       'event_id' => $event_id,
       'price' => $price,
       'capacity' => $capacity,
+      'unlimited_capacity' => $req->get_param('unlimited_capacity'),
       'status' => $status,
       'visibility' => $visibility,
       'sales_mode' => $sales_mode,
@@ -142,6 +147,7 @@ class Ticket_Types_API {
       'sales_end' => $sales_end,
       'sku' => $sku,
       'max_per_order' => $max_per_order,
+      'date_prices' => $req->get_param('date_prices'),
     ]);
 
     WC_Ticket_Product::create_or_update_for_ticket_type($ticket_type_id);
@@ -175,6 +181,8 @@ class Ticket_Types_API {
       'sales_start' => $req->get_param('sales_start'),
       'sales_end' => $req->get_param('sales_end'),
       'max_per_order' => $req->get_param('max_per_order'),
+      'date_prices' => $req->get_param('date_prices'),
+      'unlimited_capacity' => $req->get_param('unlimited_capacity'),
     ]);
     if ($validation) return $validation;
 
@@ -182,6 +190,7 @@ class Ticket_Types_API {
       'event_id' => $event_id,
       'price' => $req->get_param('price'),
       'capacity' => $req->get_param('capacity'),
+      'unlimited_capacity' => $req->get_param('unlimited_capacity'),
       'status' => $req->get_param('status'),
       'visibility' => $req->get_param('visibility'),
       'sales_mode' => $req->get_param('sales_mode'),
@@ -189,6 +198,7 @@ class Ticket_Types_API {
       'sales_end' => $req->get_param('sales_end'),
       'sku' => $req->get_param('sku'),
       'max_per_order' => $req->get_param('max_per_order'),
+      'date_prices' => $req->get_param('date_prices'),
     ]);
 
     WC_Ticket_Product::create_or_update_for_ticket_type($ticket_type_id);
@@ -300,6 +310,14 @@ class Ticket_Types_API {
         return new \WP_REST_Response(['error' => 'sales_end must be after sales_start'], 400);
       }
     }
+    if (array_key_exists('date_prices', $payload) && $payload['date_prices'] !== null) {
+      $prices = self::sanitize_date_prices($payload['date_prices']);
+      foreach ($prices as $price) {
+        if ($price < 0) {
+          return new \WP_REST_Response(['error' => 'date price must be zero or more'], 400);
+        }
+      }
+    }
 
     return null;
   }
@@ -313,6 +331,13 @@ class Ticket_Types_API {
     }
     if (array_key_exists('capacity', $payload) && $payload['capacity'] !== null) {
       update_post_meta($ticket_type_id, self::META_CAPACITY, absint($payload['capacity']));
+    }
+    if (array_key_exists('unlimited_capacity', $payload) && $payload['unlimited_capacity'] !== null) {
+      $unlimited = !empty($payload['unlimited_capacity']) ? 1 : 0;
+      update_post_meta($ticket_type_id, self::META_UNLIMITED_CAPACITY, $unlimited);
+      if ($unlimited && (!isset($payload['capacity']) || $payload['capacity'] === null)) {
+        update_post_meta($ticket_type_id, self::META_CAPACITY, 0);
+      }
     }
     if (array_key_exists('status', $payload) && $payload['status'] !== null) {
       $status = sanitize_text_field((string) $payload['status']);
@@ -345,6 +370,14 @@ class Ticket_Types_API {
     if (array_key_exists('sku', $payload) && $payload['sku'] !== null) {
       update_post_meta($ticket_type_id, self::META_SKU, sanitize_text_field((string) $payload['sku']));
     }
+    if (array_key_exists('date_prices', $payload) && $payload['date_prices'] !== null) {
+      $prices = self::sanitize_date_prices($payload['date_prices']);
+      if (!empty($prices)) {
+        update_post_meta($ticket_type_id, self::META_DATE_PRICES, $prices);
+      } else {
+        delete_post_meta($ticket_type_id, self::META_DATE_PRICES);
+      }
+    }
   }
 
   private static function format_ticket_type(int $ticket_type_id): array {
@@ -363,9 +396,40 @@ class Ticket_Types_API {
       'sales_end' => (string) get_post_meta($ticket_type_id, self::META_SALES_END, true),
       'sku' => (string) get_post_meta($ticket_type_id, self::META_SKU, true),
       'max_per_order' => (int) get_post_meta($ticket_type_id, self::META_MAX_PER_ORDER, true),
+      'date_prices' => get_post_meta($ticket_type_id, self::META_DATE_PRICES, true),
+      'unlimited_capacity' => (int) get_post_meta($ticket_type_id, self::META_UNLIMITED_CAPACITY, true),
       'product_id' => (int) get_post_meta($ticket_type_id, self::META_PRODUCT_ID, true),
       'variation_id' => (int) get_post_meta($ticket_type_id, self::META_VARIATION_ID, true),
       'author' => (int) get_post_field('post_author', $ticket_type_id),
     ];
+  }
+
+  private static function sanitize_date_prices($raw): array {
+    if (empty($raw)) return [];
+
+    if (is_string($raw)) {
+      $decoded = json_decode($raw, true);
+      if (json_last_error() === JSON_ERROR_NONE) {
+        $raw = $decoded;
+      }
+    }
+
+    $out = [];
+    if (is_array($raw)) {
+      foreach ($raw as $key => $value) {
+        if (is_array($value)) {
+          $schedule_id = absint($value['schedule_id'] ?? $value['id'] ?? 0);
+          if (!$schedule_id) continue;
+          $price = $value['price'] ?? null;
+        } else {
+          $schedule_id = absint($key);
+          $price = $value;
+        }
+        if ($price === null || $price === '') continue;
+        $out[(string) $schedule_id] = (float) $price;
+      }
+    }
+
+    return $out;
   }
 }

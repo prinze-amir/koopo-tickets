@@ -49,10 +49,21 @@ class Vendor_Events_API {
 
     $out = [];
     foreach ($q->posts as $id) {
+      $dates = WC_Cart::get_event_date_options((int) $id);
+      $dates = array_map(function ($entry) {
+        return [
+          'schedule_id' => (int) ($entry['schedule_id'] ?? 0),
+          'label' => (string) ($entry['label'] ?? ''),
+          'date' => (string) ($entry['date'] ?? ''),
+          'time' => (string) ($entry['time'] ?? ''),
+          'start_ts' => (int) ($entry['start_ts'] ?? 0),
+        ];
+      }, $dates);
       $out[] = [
         'id' => (int) $id,
         'title' => get_the_title($id),
         'type' => get_post_type($id),
+        'dates' => $dates,
       ];
     }
 

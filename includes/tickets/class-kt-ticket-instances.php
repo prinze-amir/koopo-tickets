@@ -64,6 +64,8 @@ class Ticket_Instances {
         ]);
       }
 
+      self::sync_event_rsvp($order, $item, $event_id, $quantity);
+
       $item->add_meta_data('_koopo_tickets_issued', 1, true);
       $item->add_meta_data('_koopo_ticket_ids', $ticket_ids, true);
       $item->save();
@@ -108,5 +110,74 @@ class Ticket_Instances {
       if ($item->get_meta('_koopo_ticket_type_id')) return true;
     }
     return false;
+  }
+
+  private static function sync_event_rsvp(\WC_Order $order, \WC_Order_Item_Product $item, int $event_id, int $quantity): void {
+    if ($quantity < 1 || !$event_id) return;
+    if (!class_exists('\GeoDir_Event_AYI')) return;
+
+    $users = get_post_meta($event_id, 'event_rsvp_yes', true);
+    if (!is_array($users)) $users = [];
+
+    $user_id = (int) $order->get_user_id();
+    $user_added = false;
+    if ($user_id) {
+      if (!array_key_exists($user_id, $users) && !in_array($user_id, $users, true)) {
+        $users[$user_id] = $user_id;
+        $user_added = true;
+      }
+    }
+
+    $pseudo_count = $quantity - ($user_added ? 1 : 0);
+    if ($pseudo_count < 0) $pseudo_count = 0;
+
+    $order_id = (int) $order->get_id();
+    $item_id = (int) $item->get_id();
+    for ($i = 0; $i < $pseudo_count; $i++) {
+      $key = 'kt-' . $order_id . '-' . $item_id . '-' . ($i + 1);
+      if (isset($users[$key])) {
+        $suffix = 2;
+        while (isset($users[$key . '-' . $suffix])) {
+          $suffix++;
+        }
+        $key = $key . '-' . $suffix;
+      }
+      $users[$key] = $key;
+    }
+
+    update_post_meta($event_id, 'event_rsvp_yes', $users);
+
+    if ($user_id) {
+      $posts = get_user_meta($user_id, 'event_rsvp_yes', true);
+      if (!is_array($posts)) $posts = [];
+      if (!array_key_exists($event_id, $posts)) {
+        $posts[$event_id] = $event_id;
+        update_user_meta($user_id, 'event_rsvp_yes', $posts);
+      }
+    }
+
+    self::update_event_rsvp_count($event_id);
+  }
+
+  private static function update_event_rsvp_count(int $event_id): void {
+    if (!$event_id) return;
+    if (!class_exists('\GeoDir_Event_AYI')) return;
+    if (!function_exists('geodir_db_cpt_table')) return;
+
+    global $wpdb;
+    $table = geodir_db_cpt_table(get_post_type($event_id));
+    if (!$table) return;
+
+    $count = \GeoDir_Event_AYI::count_interested($event_id);
+    if (!is_array($count)) return;
+
+    $exists = $wpdb->get_var("SHOW TABLES LIKE '{$table}'");
+    if ($exists !== $table) return;
+
+    $wpdb->query($wpdb->prepare(
+      "UPDATE {$table} SET rsvp_count = %d WHERE post_id = %d",
+      (int) ($count['total'] ?? 0),
+      $event_id
+    ));
   }
 }

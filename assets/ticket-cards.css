@@ -26,6 +26,18 @@ body.koopo-ticket--modal-open {
   font-size: 16px;
 }
 
+.koopo-ticket-soldout {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: #ffe5e5;
+  color: #8a1f1f;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .koopo-ticket-card p {
   margin: 4px 0;
   color: #555;
@@ -277,6 +289,17 @@ body.koopo-ticket--modal-open {
   font-weight: 700;
 }
 
+.koopo-ticket__guest-toggle {
+  margin-top: 10px;
+  background: none;
+  border: none;
+  color: #1a4d8f;
+  text-decoration: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
 .koopo-ticket__guest-grid {
   display: grid;
   gap: 12px;
@@ -293,4 +316,111 @@ body.koopo-ticket--modal-open {
 .koopo-ticket__guest-card h6 {
   margin: 0 0 8px;
   font-size: 14px;
+}
+
+.koopo-ticket-datepicker {
+  border: 1px solid #e3e3e3;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fafafa;
+}
+
+.koopo-ticket-datepicker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.koopo-ticket-datepicker__nav {
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+}
+
+.koopo-ticket-datepicker__nav:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.koopo-ticket-datepicker__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.koopo-ticket-datepicker__weekdays span {
+  text-align: center;
+}
+
+.koopo-ticket-datepicker__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.koopo-ticket-datepicker__cell {
+  text-align: center;
+  padding: 6px 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.koopo-ticket-datepicker__cell.is-empty {
+  background: transparent;
+  border: none;
+  cursor: default;
+}
+
+.koopo-ticket-datepicker__cell.is-unavailable {
+  background: #f2f2f2;
+  color: #b5b5b5;
+  cursor: not-allowed;
+}
+
+.koopo-ticket-datepicker__cell.is-available {
+  border-color: #d7d7d7;
+}
+
+.koopo-ticket-datepicker__cell.is-selected {
+  background: #ff8c00;
+  color: #fff;
+  border-color: #ff8c00;
+}
+
+.koopo-ticket-time-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.koopo-ticket-time-option {
+  border: 1px solid #d7d7d7;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.koopo-ticket-time-option.is-selected {
+  background: #1a1a1a;
+  color: #fff;
+  border-color: #1a1a1a;
+}
+
+.koopo-ticket-time-empty {
+  font-size: 13px;
+  color: #777;
 }

@@ -35,6 +35,15 @@ class Customer_Tickets_Print {
 
     $event_id = (int) $item->get_meta('_koopo_ticket_event_id');
     $schedule_label = (string) $item->get_meta('_koopo_ticket_schedule_label');
+    if (!$schedule_label && $event_id) {
+      $option = WC_Cart::get_event_date_option($event_id, (int) $item->get_meta('_koopo_ticket_schedule_id'));
+      if (!empty($option['label'])) {
+        $schedule_label = (string) $option['label'];
+      } else {
+        $event_dt = WC_Cart::get_event_datetime($event_id);
+        $schedule_label = (string) ($event_dt['label'] ?? '');
+      }
+    }
     $location = WC_Cart::get_event_location($event_id);
 
     $contact = [
@@ -102,6 +111,7 @@ class Customer_Tickets_Print {
           'phone' => (string) $row->attendee_phone,
           'code' => (string) $row->code,
           'qr_data' => (string) (int) $row->id,
+          'verify_url' => self::build_verification_url((string) $row->code ?: (string) (int) $row->id),
         ];
       }
       return $codes;
@@ -120,6 +130,7 @@ class Customer_Tickets_Print {
       'phone' => $contact['phone'],
       'code' => self::build_code($item->get_id(), 1),
       'qr_data' => self::build_code($item->get_id(), 1),
+      'verify_url' => self::build_verification_url(self::build_code($item->get_id(), 1)),
     ];
 
     for ($i = 0; $i < max(0, $quantity - 1); $i++) {
@@ -132,6 +143,7 @@ class Customer_Tickets_Print {
         'phone' => sanitize_text_field($guest['phone'] ?? ''),
         'code' => self::build_code($item->get_id(), $i + 2),
         'qr_data' => self::build_code($item->get_id(), $i + 2),
+        'verify_url' => self::build_verification_url(self::build_code($item->get_id(), $i + 2)),
       ];
     }
 
@@ -154,7 +166,9 @@ class Customer_Tickets_Print {
 
     $svgs = [];
     foreach ($codes as $entry) {
-      $payload = isset($entry['qr_data']) ? (string) $entry['qr_data'] : (string) $entry['code'];
+      $payload = !empty($entry['verify_url'])
+        ? (string) $entry['verify_url']
+        : (isset($entry['qr_data']) ? (string) $entry['qr_data'] : (string) $entry['code']);
       $qr_svg = self::generate_qr_svg($payload);
       $svgs[] = $qr_svg;
     }
@@ -168,9 +182,8 @@ class Customer_Tickets_Print {
 
     foreach ($levels as $level) {
       for ($i = $type; $i <= 10; $i++) {
-        $prev = null;
         try {
-          $prev = set_error_handler(function ($severity, $message) {
+          set_error_handler(function ($severity, $message) {
             throw new \RuntimeException($message, $severity);
           });
           $qr = new \geodir_tickets\QRCode();
@@ -180,15 +193,30 @@ class Customer_Tickets_Print {
           $qr->make();
           ob_start();
           $qr->printSVG(3);
-          if ($prev) set_error_handler($prev);
           return ob_get_clean();
         } catch (\Throwable $e) {
-          if ($prev) set_error_handler($prev);
           continue;
+        } finally {
+          restore_error_handler();
         }
       }
     }
 
     return '';
+  }
+
+  private static function build_verification_url(string $payload): string {
+    $base = '';
+    if (function_exists('dokan_get_navigation_url')) {
+      $base = dokan_get_navigation_url('koopo-tickets');
+    }
+
+    $base = apply_filters('koopo_tickets_verification_base_url', $base);
+    if (!$base) {
+      $base = home_url('/');
+    }
+
+    $url = add_query_arg(['kt_code' => $payload], $base);
+    return (string) apply_filters('koopo_tickets_verification_url', $url, $payload);
   }
 }

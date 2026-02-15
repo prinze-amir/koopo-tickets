@@ -43,6 +43,22 @@
     $out.text(text).css('color', '#222');
   }
 
+  function getQueryParam(name) {
+    var query = window.location.search || '';
+    if (!query) return '';
+    var params = new URLSearchParams(query);
+    return params.get(name) || '';
+  }
+
+  function maybePrefillCode() {
+    var code = getQueryParam('kt_code');
+    if (!code) return;
+    var $input = $('#koopo-ticket-code');
+    if (!$input.length) return;
+    $input.val(code);
+    $('#koopo-ticket-checkin').trigger('submit');
+  }
+
   $(document).on('submit', '#koopo-ticket-checkin', function (e) {
     e.preventDefault();
     var code = $('#koopo-ticket-code').val();
@@ -73,4 +89,6 @@
       $btn.prop('disabled', false).removeClass('is-loading');
     });
   });
+
+  $(maybePrefillCode);
 })(jQuery);

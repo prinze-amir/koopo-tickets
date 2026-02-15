@@ -31,7 +31,13 @@ defined('ABSPATH') || exit;
           </div>
           <div>
             <label for="koopo-ticket-capacity"><?php echo esc_html__('Capacity', 'koopo-tickets'); ?></label>
-            <input id="koopo-ticket-capacity" type="number" min="0" step="1">
+            <input id="koopo-ticket-capacity" type="number" min="0" step="1" value="100">
+          </div>
+          <div>
+            <label for="koopo-ticket-unlimited"><?php echo esc_html__('Unlimited capacity', 'koopo-tickets'); ?></label>
+            <div>
+              <label><input id="koopo-ticket-unlimited" type="checkbox"> <?php echo esc_html__('No capacity limit', 'koopo-tickets'); ?></label>
+            </div>
           </div>
           <div>
             <label for="koopo-ticket-status"><?php echo esc_html__('Status', 'koopo-tickets'); ?></label>
@@ -71,6 +77,20 @@ defined('ABSPATH') || exit;
             <label for="koopo-ticket-max"><?php echo esc_html__('Max per order', 'koopo-tickets'); ?></label>
             <input id="koopo-ticket-max" type="number" min="0" step="1" placeholder="<?php echo esc_attr__('0 = unlimited', 'koopo-tickets'); ?>">
           </div>
+        </div>
+        <div id="koopo-ticket-date-prices" class="koopo-ticket-date-prices" style="display:none; margin-top:16px;">
+          <label><?php echo esc_html__('Prices by Date/Time (optional)', 'koopo-tickets'); ?></label>
+          <div class="koopo-ticket-date-prices__controls">
+            <div class="koopo-ticket-date-picker" data-vendor-date-picker></div>
+            <div class="koopo-ticket-date-times" data-vendor-date-times></div>
+            <input type="hidden" id="koopo-ticket-date-select" value="">
+            <div class="koopo-ticket-date-price-input">
+              <input id="koopo-ticket-date-price" type="number" min="0" step="0.01" placeholder="<?php echo esc_attr__('Use base price', 'koopo-tickets'); ?>">
+              <button type="button" class="button" id="koopo-ticket-date-apply"><?php echo esc_html__('Apply', 'koopo-tickets'); ?></button>
+            </div>
+          </div>
+          <div class="koopo-ticket-date-prices__list"></div>
+          <p class="koopo-tickets-note"><?php echo esc_html__('Choose a date, set a price, and apply. Only changed dates appear in the list.', 'koopo-tickets'); ?></p>
         </div>
         <div class="koopo-tickets-actions">
           <button type="submit" class="button button-primary" id="koopo-ticket-submit"><?php echo esc_html__('Create Ticket Type', 'koopo-tickets'); ?></button>

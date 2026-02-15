@@ -31,6 +31,7 @@ class WC_Ticket_Product {
     }
     if (!$parent_id) return 0;
 
+    self::ensure_parent_image($parent_id, $event_id);
     $variation_id = (int) get_post_meta($ticket_type_id, self::META_TICKET_VARIATION_ID, true);
     $variation = $variation_id ? new \WC_Product_Variation($variation_id) : null;
     if (!$variation || !$variation->get_id()) {
@@ -39,6 +40,7 @@ class WC_Ticket_Product {
 
     $price = (float) get_post_meta($ticket_type_id, Ticket_Types_API::META_PRICE, true);
     $capacity = (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_CAPACITY, true);
+    $unlimited = (bool) get_post_meta($ticket_type_id, Ticket_Types_API::META_UNLIMITED_CAPACITY, true);
     $status = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_STATUS, true);
     $sku = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_SKU, true);
 
@@ -54,6 +56,9 @@ class WC_Ticket_Product {
     if ($status === 'inactive') {
       $variation->set_manage_stock(false);
       $variation->set_stock_status('outofstock');
+    } elseif ($unlimited) {
+      $variation->set_manage_stock(false);
+      $variation->set_stock_status('instock');
     } elseif ($capacity > 0) {
       $variation->set_manage_stock(true);
       $variation->set_stock_quantity($capacity);
@@ -63,7 +68,7 @@ class WC_Ticket_Product {
       $variation->set_stock_status('outofstock');
     }
 
-    $new_variation_id = $variation->save();
+    $new_variation_id = self::safe_save_product($variation);
 
     if ($new_variation_id) {
       update_post_meta($new_variation_id, self::META_TICKET_TYPE_ID, $ticket_type_id);
@@ -120,10 +125,9 @@ class WC_Ticket_Product {
       $parent->set_props(['post_author' => (int) $event->post_author]);
     }
 
-    $parent_id = $parent->save();
+    $parent_id = self::safe_save_product($parent);
     if ($parent_id) {
       $parent->set_id($parent_id);
-      $parent->save();
       return $parent;
     }
 
@@ -155,7 +159,20 @@ class WC_Ticket_Product {
     }
 
     $parent->set_attributes($attributes);
-    $parent->save();
+    self::safe_save_product($parent);
+  }
+
+  private static function ensure_parent_image(int $parent_id, int $event_id): void {
+    $parent = wc_get_product($parent_id);
+    if (!$parent || !($parent instanceof \WC_Product_Variable)) return;
+
+    if ($parent->get_image_id()) return;
+
+    $event_image_id = $event_id ? get_post_thumbnail_id($event_id) : 0;
+    if (!$event_image_id) return;
+
+    $parent->set_image_id((int) $event_image_id);
+    self::safe_save_product($parent);
   }
 
   private static function build_variation_attributes(string $ticket_name): array {
@@ -168,5 +185,17 @@ class WC_Ticket_Product {
 
   public static function variation_attribute_key(): string {
     return 'attribute_' . self::parent_attribute_key();
+  }
+
+  private static function safe_save_product(\WC_Product $product): int {
+    try {
+      return (int) $product->save();
+    } catch (\TypeError $e) {
+      $message = $e->getMessage();
+      if ($message && strpos($message, 'VersionStringGenerator::delete_version') !== false) {
+        return (int) $product->get_id();
+      }
+      throw $e;
+    }
   }
 }

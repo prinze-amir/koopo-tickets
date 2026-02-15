@@ -82,6 +82,24 @@ class Customer_Tickets_API {
             }
           }
         }
+        if (!$schedule_date && !$schedule_time && $event_id) {
+          if ($schedule_id) {
+            $option = WC_Cart::get_event_date_option($event_id, $schedule_id);
+            $schedule_date = $option['date'] ?? '';
+            $schedule_time = $option['time'] ?? '';
+            if (!$schedule_label && !empty($option['label'])) {
+              $schedule_label = $option['label'];
+            }
+          }
+          if (!$schedule_date && !$schedule_time) {
+            $event_dt = WC_Cart::get_event_datetime($event_id);
+            $schedule_date = $event_dt['date'] ?? '';
+            $schedule_time = $event_dt['time'] ?? '';
+            if (!$schedule_label && !empty($event_dt['label'])) {
+              $schedule_label = $event_dt['label'];
+            }
+          }
+        }
 
         $quantity = (int) $item->get_quantity();
         $rows = self::get_ticket_rows($item_id);

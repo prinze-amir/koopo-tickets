@@ -36,6 +36,18 @@
       var title = item.event_url ? '<a class="koopo-ticket-event-link" href="' + item.event_url + '">' + (item.event_title || '') + '</a>' : (item.event_title || '');
       var attendees = buildAttendeeAvatars(item.attendees || []);
 
+      var dateHtml = '';
+      if (item.schedule_date || item.schedule_time) {
+        dateHtml = '<div class="koopo-ticket-meta koopo-ticket-dates">' +
+          (item.schedule_date ? '<span>Date: ' + item.schedule_date + '</span>' : '') +
+          (item.schedule_time ? '<span>Time: ' + item.schedule_time + '</span>' : '') +
+        '</div>';
+      } else if (item.schedule_label) {
+        dateHtml = '<div class="koopo-ticket-meta koopo-ticket-dates">' +
+          '<span>Date: ' + item.schedule_label + '</span>' +
+        '</div>';
+      }
+
       return '<div class="koopo-ticket-card" data-item-id="' + item.item_id + '">' +
         '<div class="koopo-ticket-card__header">' +
           image +
@@ -46,10 +58,7 @@
             '<div class="koopo-ticket-meta">Tickets: ' + item.quantity + '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="koopo-ticket-meta koopo-ticket-dates">' +
-          (item.schedule_date ? '<span>Date: ' + item.schedule_date + '</span>' : '') +
-          (item.schedule_time ? '<span>Time: ' + item.schedule_time + '</span>' : '') +
-        '</div>' +
+        dateHtml +
         attendees +
         '<div class="koopo-ticket-meta"><span class="koopo-ticket-status">' + (item.status_label || item.status) + '</span></div>' +
         guestsHtml +
