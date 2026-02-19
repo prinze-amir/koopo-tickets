@@ -12,6 +12,7 @@
   var currentCalendar = { year: 0, month: 0, selectedDateKey: '' };
   var currentStep = 1;
   var totalSteps = 2;
+  var analyticsPalette = ['#1f5fbf', '#ff8c00', '#2d9d78', '#6d4cce', '#d93f6f', '#f4b400', '#0097a7', '#7b8a8b', '#e65100', '#3949ab'];
 
   function isMobileViewport() {
     return window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
@@ -88,6 +89,83 @@
     if (!value) return '—';
     if (api.currency_symbol) return api.currency_symbol + parseFloat(value).toFixed(2);
     return parseFloat(value).toFixed(2);
+  }
+
+  function fmtMoney(value) {
+    var amount = parseFloat(value || 0);
+    if (isNaN(amount)) amount = 0;
+    if (api.currency_symbol) return api.currency_symbol + amount.toFixed(2);
+    return amount.toFixed(2);
+  }
+
+  function renderAnalytics(data) {
+    var stats = data || {};
+    $('#koopo-analytics-tickets').text(parseInt(stats.tickets_sold || 0, 10));
+    $('#koopo-analytics-gross').text(fmtMoney(stats.gross_sales || 0));
+    $('#koopo-analytics-net').text(fmtMoney(stats.net_sales || 0));
+    renderAnalyticsPie(stats.event_breakdown || []);
+  }
+
+  function renderAnalyticsPie(breakdown) {
+    var $pie = $('#koopo-analytics-pie');
+    var $legend = $('#koopo-analytics-legend');
+    var $total = $('#koopo-analytics-pie-total');
+    if (!$pie.length || !$legend.length || !$total.length) return;
+
+    var list = Array.isArray(breakdown) ? breakdown : [];
+    list = list.filter(function (item) {
+      return parseFloat(item.gross_sales || 0) > 0;
+    });
+
+    var total = list.reduce(function (sum, item) {
+      return sum + parseFloat(item.gross_sales || 0);
+    }, 0);
+
+    $total.text(fmtMoney(total));
+
+    if (!list.length || total <= 0) {
+      $pie.css('background', 'conic-gradient(#e5e5e5 0 100%)');
+      $legend.html('<div class="koopo-tickets-note">No event sales yet.</div>');
+      return;
+    }
+
+    var segments = [];
+    var legendHtml = [];
+    var start = 0;
+
+    list.forEach(function (item, index) {
+      var value = parseFloat(item.gross_sales || 0);
+      if (value <= 0) return;
+      var ratio = value / total;
+      var end = start + (ratio * 100);
+      var color = analyticsPalette[index % analyticsPalette.length];
+      var title = item.event_title || ('Event #' + (item.event_id || ''));
+
+      segments.push(color + ' ' + start.toFixed(2) + '% ' + end.toFixed(2) + '%');
+      legendHtml.push(
+        '<div class="koopo-ticket-analytics-legend__item">' +
+          '<div class="koopo-ticket-analytics-legend__left">' +
+            '<span class="koopo-ticket-analytics-legend__dot" style="background:' + color + ';"></span>' +
+            '<span class="koopo-ticket-analytics-legend__label">' + escapeHtml(title) + '</span>' +
+          '</div>' +
+          '<span class="koopo-ticket-analytics-legend__value">' + fmtMoney(value) + ' (' + (ratio * 100).toFixed(1) + '%)</span>' +
+        '</div>'
+      );
+      start = end;
+    });
+
+    $pie.css('background', 'conic-gradient(' + segments.join(', ') + ')');
+    $legend.html(legendHtml.join(''));
+  }
+
+  function loadAnalytics() {
+    request('vendor/ticket-analytics', 'GET')
+      .done(function (stats) {
+        renderAnalytics(stats || {});
+      })
+      .fail(function () {
+        renderAnalytics(null);
+      });
   }
 
   function fmtSalesWindow(start, end) {
@@ -744,6 +822,8 @@
   $(function () {
     renderEventCards();
     renderRows([]);
+    renderAnalytics(null);
+    loadAnalytics();
     syncMobileEventMode();
 
     bindCreate();

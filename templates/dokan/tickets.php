@@ -2,14 +2,66 @@
 
 defined('ABSPATH') || exit;
 
+$event_cpt = \Koopo_Tickets\Settings::get('event_cpt');
+if (is_array($event_cpt)) {
+  $event_cpt = reset($event_cpt);
+}
+$event_cpt = sanitize_key((string) $event_cpt);
+if (!$event_cpt) {
+  $event_cpt = 'gd_event';
+}
+
+$add_event_url = '';
+if (function_exists('geodir_add_listing_page_url')) {
+  $add_event_url = geodir_add_listing_page_url($event_cpt);
+} elseif (current_user_can('edit_posts')) {
+  $add_event_url = admin_url('post-new.php?post_type=' . $event_cpt);
+}
+
 ?>
 <div class="dokan-dashboard-wrap" id="koopo-ticket-dashboard">
   <?php
             do_action( 'dokan_dashboard_content_before' );
     ?>
   <div class="dokan-dashboard-content">
-    <h2><?php echo esc_html__('Event Tickets', 'koopo-tickets'); ?></h2>
-    <p class="koopo-tickets-note"><?php echo esc_html__('Select an event first, then manage ticket types and scan tickets for check-in.', 'koopo-tickets'); ?></p>
+    <div class="koopo-tickets-page-head">
+      <div>
+        <h2><?php echo esc_html__('Event Tickets', 'koopo-tickets'); ?></h2>
+        <p class="koopo-tickets-note"><?php echo esc_html__('Select an event first, then manage ticket types and scan tickets for check-in.', 'koopo-tickets'); ?></p>
+      </div>
+      <?php if (!empty($add_event_url)): ?>
+      <div class="koopo-tickets-page-actions">
+        <a class="button button-primary" href="<?php echo esc_url($add_event_url); ?>"><?php echo esc_html__('Add New Event', 'koopo-tickets'); ?></a>
+      </div>
+      <?php endif; ?>
+    </div>
+
+    <div class="koopo-tickets-card">
+      <h3><?php echo esc_html__('Ticket Sales Analytics', 'koopo-tickets'); ?></h3>
+      <div id="koopo-ticket-analytics" class="koopo-ticket-analytics-grid">
+        <div class="koopo-ticket-analytics-item">
+          <span class="koopo-ticket-analytics-item__label"><?php echo esc_html__('Total Tickets Sold', 'koopo-tickets'); ?></span>
+          <strong id="koopo-analytics-tickets">0</strong>
+        </div>
+        <div class="koopo-ticket-analytics-item">
+          <span class="koopo-ticket-analytics-item__label"><?php echo esc_html__('Gross Profits', 'koopo-tickets'); ?></span>
+          <strong id="koopo-analytics-gross">$0.00</strong>
+        </div>
+        <div class="koopo-ticket-analytics-item">
+          <span class="koopo-ticket-analytics-item__label"><?php echo esc_html__('Net Profits', 'koopo-tickets'); ?></span>
+          <strong id="koopo-analytics-net">$0.00</strong>
+        </div>
+      </div>
+      <div class="koopo-ticket-analytics-chart-row">
+        <h4><?php echo esc_html__('Sales Allocation by Event', 'koopo-tickets'); ?></h4>
+        <div class="koopo-ticket-analytics-pie-wrap">
+          <div id="koopo-analytics-pie" class="koopo-ticket-analytics-pie">
+            <span id="koopo-analytics-pie-total" class="koopo-ticket-analytics-pie__center">$0.00</span>
+          </div>
+          <div id="koopo-analytics-legend" class="koopo-ticket-analytics-legend"></div>
+        </div>
+      </div>
+    </div>
 
     <div class="koopo-tickets-card" id="koopo-event-selector-card">
       <h3><?php echo esc_html__('Select Event', 'koopo-tickets'); ?></h3>

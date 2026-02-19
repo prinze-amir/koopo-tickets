@@ -2,18 +2,18 @@
 /**
  * Plugin Name: Koopo Tickets
  * Description: Ticketing engine for Koopo Online with WooCommerce/Dokan integration.
- * Version: 0.2.0
+ * Version: 0.2.5
  * Author: Koopo
  */
 
 defined('ABSPATH') || exit;
 
-define('KOOPO_TICKETS_VERSION', '0.2.0');
+define('KOOPO_TICKETS_VERSION', '0.2.5');
 define('KOOPO_TICKETS_PATH', plugin_dir_path(__FILE__));
 define('KOOPO_TICKETS_URL', plugin_dir_url(__FILE__));
 
 final class Koopo_Tickets {
-  const VERSION = '0.2.0';
+  const VERSION = '0.2.5';
   const SLUG = 'koopo-tickets';
 
   private static $instance = null;
@@ -54,6 +54,7 @@ final class Koopo_Tickets {
     require_once __DIR__ . '/includes/customer/class-kt-customer-tickets-dashboard.php';
     require_once __DIR__ . '/includes/customer/class-kt-customer-tickets-api.php';
     require_once __DIR__ . '/includes/customer/class-kt-customer-tickets-print.php';
+    require_once __DIR__ . '/includes/customer/class-kt-public-ticket-types-api.php';
 
     Koopo_Tickets\DB::maybe_upgrade();
     Koopo_Tickets\Settings::init();
@@ -70,6 +71,7 @@ final class Koopo_Tickets {
     Koopo_Tickets\Customer_Tickets_Dashboard::init();
     Koopo_Tickets\Customer_Tickets_API::init();
     Koopo_Tickets\Customer_Tickets_Print::init();
+    Koopo_Tickets\Public_Ticket_Types_API::init();
   }
 }
 
