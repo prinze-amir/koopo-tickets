@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Koopo Tickets
  * Description: Ticketing engine for Koopo Online with WooCommerce/Dokan integration.
- * Version: 0.2.5
+ * Version: 0.2.6
  * Author: Koopo
  */
 
