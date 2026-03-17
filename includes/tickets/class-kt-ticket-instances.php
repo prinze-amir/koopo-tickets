@@ -28,47 +28,52 @@ class Ticket_Instances {
       if (!$ticket_type_id || !$event_id) continue;
 
       if ($item->get_meta('_koopo_tickets_issued')) continue;
+      if (!wc_add_order_item_meta($item_id, '_koopo_tickets_issuing', time(), true)) continue;
 
-      $quantity = (int) $item->get_quantity();
-      if ($quantity < 1) continue;
+      try {
+        $quantity = (int) $item->get_quantity();
+        if ($quantity < 1) continue;
 
-      $schedule_id = (int) $item->get_meta('_koopo_ticket_schedule_id');
-      $schedule_label = (string) $item->get_meta('_koopo_ticket_schedule_label');
-      $variation_id = (int) $item->get_variation_id();
+        $schedule_id = (int) $item->get_meta('_koopo_ticket_schedule_id');
+        $schedule_label = (string) $item->get_meta('_koopo_ticket_schedule_label');
+        $variation_id = (int) $item->get_variation_id();
 
-      $contact = [
-        'name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
-        'email' => (string) $item->get_meta('_koopo_ticket_contact_email'),
-        'phone' => (string) $item->get_meta('_koopo_ticket_contact_phone'),
-      ];
+        $contact = [
+          'name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
+          'email' => (string) $item->get_meta('_koopo_ticket_contact_email'),
+          'phone' => (string) $item->get_meta('_koopo_ticket_contact_phone'),
+        ];
 
-      $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
-      $guests = $guests_raw ? json_decode($guests_raw, true) : [];
-      if (!is_array($guests)) $guests = [];
+        $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
+        $guests = $guests_raw ? json_decode($guests_raw, true) : [];
+        if (!is_array($guests)) $guests = [];
 
-      $ticket_ids = [];
-      for ($i = 0; $i < $quantity; $i++) {
-        $guest = $i === 0 ? $contact : ($guests[$i - 1] ?? []);
-        $ticket_ids[] = self::create_ticket([
-          'order_id' => $order_id,
-          'order_item_id' => $item_id,
-          'event_id' => $event_id,
-          'ticket_type_id' => $ticket_type_id,
-          'variation_id' => $variation_id,
-          'schedule_id' => $schedule_id,
-          'schedule_label' => $schedule_label,
-          'attendee_name' => sanitize_text_field($guest['name'] ?? ''),
-          'attendee_email' => sanitize_email($guest['email'] ?? ''),
-          'attendee_phone' => sanitize_text_field($guest['phone'] ?? ''),
-          'attendee_index' => $i + 1,
-        ]);
+        $ticket_ids = [];
+        for ($i = 0; $i < $quantity; $i++) {
+          $guest = $i === 0 ? $contact : ($guests[$i - 1] ?? []);
+          $ticket_ids[] = self::create_ticket([
+            'order_id' => $order_id,
+            'order_item_id' => $item_id,
+            'event_id' => $event_id,
+            'ticket_type_id' => $ticket_type_id,
+            'variation_id' => $variation_id,
+            'schedule_id' => $schedule_id,
+            'schedule_label' => $schedule_label,
+            'attendee_name' => sanitize_text_field($guest['name'] ?? ''),
+            'attendee_email' => sanitize_email($guest['email'] ?? ''),
+            'attendee_phone' => sanitize_text_field($guest['phone'] ?? ''),
+            'attendee_index' => $i + 1,
+          ]);
+        }
+
+        self::sync_event_rsvp($order, $item, $event_id, $quantity);
+
+        $item->add_meta_data('_koopo_tickets_issued', 1, true);
+        $item->add_meta_data('_koopo_ticket_ids', $ticket_ids, true);
+        $item->save();
+      } finally {
+        wc_delete_order_item_meta($item_id, '_koopo_tickets_issuing');
       }
-
-      self::sync_event_rsvp($order, $item, $event_id, $quantity);
-
-      $item->add_meta_data('_koopo_tickets_issued', 1, true);
-      $item->add_meta_data('_koopo_ticket_ids', $ticket_ids, true);
-      $item->save();
     }
   }
 
@@ -76,6 +81,15 @@ class Ticket_Instances {
     global $wpdb;
 
     $table = $wpdb->prefix . 'koopo_tickets';
+    $existing_id = (int) $wpdb->get_var($wpdb->prepare(
+      "SELECT id FROM {$table} WHERE order_item_id = %d AND attendee_index = %d LIMIT 1",
+      (int) $data['order_item_id'],
+      (int) $data['attendee_index']
+    ));
+    if ($existing_id > 0) {
+      return $existing_id;
+    }
+
     $code = self::generate_code($data['order_id'], $data['order_item_id'], $data['attendee_index']);
 
     $wpdb->insert($table, [
@@ -171,11 +185,14 @@ class Ticket_Instances {
     $count = \GeoDir_Event_AYI::count_interested($event_id);
     if (!is_array($count)) return;
 
-    $exists = $wpdb->get_var("SHOW TABLES LIKE '{$table}'");
+    $safe_table = preg_replace('/[^A-Za-z0-9_]/', '', (string) $table);
+    if (!$safe_table) return;
+
+    $exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $safe_table));
     if ($exists !== $table) return;
 
     $wpdb->query($wpdb->prepare(
-      "UPDATE {$table} SET rsvp_count = %d WHERE post_id = %d",
+      "UPDATE `{$safe_table}` SET rsvp_count = %d WHERE post_id = %d",
       (int) ($count['total'] ?? 0),
       $event_id
     ));

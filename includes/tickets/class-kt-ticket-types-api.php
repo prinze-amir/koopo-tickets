@@ -231,13 +231,23 @@ class Ticket_Types_API {
     $user_id = get_current_user_id();
 
     $event_id = absint($req->get_param('event_id'));
+    $page = max(1, absint($req->get_param('page')));
+    $per_page = absint($req->get_param('per_page'));
+    if ($per_page < 1) {
+      $per_page = 200;
+    }
+    if ($per_page > 200) {
+      $per_page = 200;
+    }
     $query_args = [
       'post_type' => Ticket_Types_CPT::POST_TYPE,
       'post_status' => 'publish',
-      'posts_per_page' => 200,
+      'posts_per_page' => $per_page,
+      'paged' => $page,
       'orderby' => 'title',
       'order' => 'ASC',
       'fields' => 'ids',
+      'no_found_rows' => false,
     ];
 
     if (!Access::is_admin_bypass()) {
@@ -261,7 +271,12 @@ class Ticket_Types_API {
       $items[] = self::format_ticket_type($ticket_type_id);
     }
 
-    return new \WP_REST_Response($items, 200);
+    $response = new \WP_REST_Response($items, 200);
+    $response->header('X-WP-Page', (string) $page);
+    $response->header('X-WP-Per-Page', (string) $per_page);
+    $response->header('X-WP-Total', (string) $q->found_posts);
+    $response->header('X-WP-TotalPages', (string) $q->max_num_pages);
+    return $response;
   }
 
   private static function validate_meta(array $payload) {

@@ -8,12 +8,12 @@
 
 defined('ABSPATH') || exit;
 
-define('KOOPO_TICKETS_VERSION', '0.2.5');
+define('KOOPO_TICKETS_VERSION', '0.2.6');
 define('KOOPO_TICKETS_PATH', plugin_dir_path(__FILE__));
 define('KOOPO_TICKETS_URL', plugin_dir_url(__FILE__));
 
 final class Koopo_Tickets {
-  const VERSION = '0.2.5';
+  const VERSION = '0.2.6';
   const SLUG = 'koopo-tickets';
 
   private static $instance = null;

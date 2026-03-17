@@ -464,9 +464,12 @@
     return guests;
   }
 
-  function addItemsToCart($modal, selections, done) {
+  function addItemsToCart($modal, selections, done, fail) {
     var ajaxUrl = wc_add_to_cart_params ? wc_add_to_cart_params.wc_ajax_url.replace('%%endpoint%%', 'add_to_cart') : '';
-    if (!ajaxUrl) return;
+    if (!ajaxUrl) {
+      fail('Cart endpoint is unavailable.');
+      return;
+    }
 
     var attributeKey = $modal.data('attribute-key');
     var productId = parseInt($modal.data('product-id'), 10);
@@ -481,8 +484,16 @@
     var guests = collectGuests($modal);
 
     var queue = selections.slice();
+    var stopped = false;
+
+    function stopWithError(message) {
+      if (stopped) return;
+      stopped = true;
+      fail(message || 'Unable to add tickets to cart.');
+    }
 
     function next() {
+      if (stopped) return;
       if (!queue.length) {
         done();
         return;
@@ -507,8 +518,14 @@
 
       payload[attributeKey] = item.name;
 
-      $.post(ajaxUrl, payload).always(function () {
+      $.post(ajaxUrl, payload).done(function (response) {
+        if (response && response.error) {
+          stopWithError('Unable to add one or more ticket selections. Please review quantities and availability.');
+          return;
+        }
         next();
+      }).fail(function () {
+        stopWithError('Unable to add one or more ticket selections. Please try again.');
       });
     }
 
@@ -662,6 +679,9 @@
       if (checkoutUrl) {
         window.location = checkoutUrl;
       }
+    }, function (message) {
+      button.prop('disabled', false).removeClass('is-loading');
+      showNotice($modal, message);
     });
   });
 })(jQuery);

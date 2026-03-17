@@ -37,13 +37,28 @@ class Customer_Tickets_API {
 
   public static function list_tickets(\WP_REST_Request $req) {
     $user_id = get_current_user_id();
-    $orders = wc_get_orders([
+    $page = max(1, absint($req->get_param('page')));
+    $per_page = absint($req->get_param('per_page'));
+    if ($per_page < 1) {
+      $per_page = 50;
+    }
+    if ($per_page > 100) {
+      $per_page = 100;
+    }
+
+    $orders_result = wc_get_orders([
       'customer_id' => $user_id,
       'status' => ['processing', 'completed', 'on-hold'],
-      'limit' => 50,
+      'limit' => $per_page,
+      'paged' => $page,
+      'paginate' => true,
       'orderby' => 'date',
       'order' => 'DESC',
     ]);
+
+    $orders = is_array($orders_result) ? $orders_result : ($orders_result->orders ?? []);
+    $total = is_array($orders_result) ? count($orders_result) : (int) ($orders_result->total ?? 0);
+    $total_pages = is_array($orders_result) ? 1 : (int) ($orders_result->max_num_pages ?? 0);
 
     $out = [];
 
@@ -136,7 +151,12 @@ class Customer_Tickets_API {
       }
     }
 
-    return new \WP_REST_Response($out, 200);
+    $response = new \WP_REST_Response($out, 200);
+    $response->header('X-WP-Page', (string) $page);
+    $response->header('X-WP-Per-Page', (string) $per_page);
+    $response->header('X-WP-Total', (string) $total);
+    $response->header('X-WP-TotalPages', (string) $total_pages);
+    return $response;
   }
 
   public static function update_guests(\WP_REST_Request $req) {

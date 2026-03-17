@@ -32,14 +32,24 @@ class Public_Ticket_Types_API {
 
   public static function list_ticket_types(\WP_REST_Request $req) {
     $event_id = absint($req->get_param('event_id'));
+    $page = max(1, absint($req->get_param('page')));
+    $per_page = absint($req->get_param('per_page'));
+    if ($per_page < 1) {
+      $per_page = 50;
+    }
+    if ($per_page > 200) {
+      $per_page = 200;
+    }
 
     $query_args = [
       'post_type' => Ticket_Types_CPT::POST_TYPE,
       'post_status' => 'publish',
-      'posts_per_page' => 200,
+      'posts_per_page' => $per_page,
+      'paged' => $page,
       'orderby' => 'title',
       'order' => 'ASC',
       'fields' => 'ids',
+      'no_found_rows' => false,
     ];
 
     if ($event_id > 0) {
@@ -66,6 +76,10 @@ class Public_Ticket_Types_API {
       'items' => $items,
       'count' => count($items),
       'event_id' => $event_id > 0 ? $event_id : null,
+      'page' => $page,
+      'per_page' => $per_page,
+      'total' => (int) $q->found_posts,
+      'total_pages' => (int) $q->max_num_pages,
     ], 200);
   }
 

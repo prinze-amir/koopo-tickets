@@ -33,6 +33,9 @@ class Ticket_Validation {
 
     $ticket = self::resolve_ticket($code);
     if (!$ticket) return new \WP_REST_Response(['error' => 'Ticket not found'], 404);
+    if (!self::current_user_can_access_ticket($ticket)) {
+      return new \WP_REST_Response(['error' => 'Forbidden'], 403);
+    }
 
     return new \WP_REST_Response(self::format_ticket($ticket), 200);
   }
@@ -43,6 +46,9 @@ class Ticket_Validation {
 
     $ticket = self::resolve_ticket($code);
     if (!$ticket) return new \WP_REST_Response(['error' => 'Ticket not found'], 404);
+    if (!self::current_user_can_access_ticket($ticket)) {
+      return new \WP_REST_Response(['error' => 'Forbidden'], 403);
+    }
 
     if ($ticket->status === 'redeemed') {
       return new \WP_REST_Response(['error' => 'Ticket already redeemed'], 409);
@@ -86,6 +92,29 @@ class Ticket_Validation {
       'status' => $status,
       'updated_at' => gmdate('Y-m-d H:i:s'),
     ], ['id' => $ticket_id], ['%s', '%s'], ['%d']);
+  }
+
+  private static function current_user_can_access_ticket(object $ticket): bool {
+    $user_id = get_current_user_id();
+    if (!$user_id) {
+      return false;
+    }
+
+    if (Access::is_admin_bypass($user_id)) {
+      return true;
+    }
+
+    $event_id = (int) ($ticket->event_id ?? 0);
+    if (!$event_id) {
+      return false;
+    }
+
+    $event = get_post($event_id);
+    if (!$event) {
+      return false;
+    }
+
+    return (int) $event->post_author === $user_id;
   }
 
   private static function format_ticket($ticket): array {

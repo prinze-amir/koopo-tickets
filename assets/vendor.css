@@ -476,7 +476,7 @@
 }
 
 .koopo-ticket-form-modal {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: rgba(20, 25, 33, 0.55);
   z-index: 9999;

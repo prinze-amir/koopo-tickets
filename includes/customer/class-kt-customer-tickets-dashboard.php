@@ -64,9 +64,7 @@ class Customer_Tickets_Dashboard {
     if (!is_user_logged_in()) return;
 
     $load_assets = false;
-    $url = wc_get_account_endpoint_url('tickets');
-
-    if (is_account_page() && $url === home_url('/my-account-koopo/tickets/')) {
+    if (is_account_page() && function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('tickets')) {
       $load_assets = true;
     }
 

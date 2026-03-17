@@ -27,8 +27,23 @@ class Vendor_Events_API {
     $user_id = get_current_user_id();
     if (!$user_id) return new \WP_REST_Response([], 200);
 
-    $out = self::query_events($user_id);
-    return new \WP_REST_Response($out, 200);
+    $page = max(1, absint($req->get_param('page')));
+    $per_page = absint($req->get_param('per_page'));
+    if ($per_page < 1) {
+      $per_page = 50;
+    }
+    if ($per_page > 200) {
+      $per_page = 200;
+    }
+
+    $result = self::query_events($user_id, $page, $per_page, true);
+    $response = new \WP_REST_Response($result['items'], 200);
+    $response->header('X-WP-Page', (string) $page);
+    $response->header('X-WP-Per-Page', (string) $per_page);
+    $response->header('X-WP-Total', (string) ($result['total'] ?? 0));
+    $response->header('X-WP-TotalPages', (string) ($result['total_pages'] ?? 0));
+
+    return $response;
   }
 
   public static function get_ticket_analytics(\WP_REST_Request $req) {
@@ -45,13 +60,26 @@ class Vendor_Events_API {
       }
     }
 
+    $refresh = !empty($req->get_param('refresh'));
+    $cache_ttl = (int) apply_filters('koopo_tickets_analytics_cache_ttl', 120, $user_id, $event_id);
+    $cache_key = self::analytics_cache_key($user_id, $event_id);
+    if (!$refresh && $cache_ttl > 0) {
+      $cached = get_transient($cache_key);
+      if (is_array($cached)) {
+        return new \WP_REST_Response($cached, 200);
+      }
+    }
+
     $stats = self::calculate_ticket_analytics($user_id, $event_id);
+    if ($cache_ttl > 0) {
+      set_transient($cache_key, $stats, $cache_ttl);
+    }
     return new \WP_REST_Response($stats, 200);
   }
 
   public static function get_events_for_user(int $user_id): array {
     if (!$user_id) return [];
-    return self::query_events($user_id);
+    return self::query_events($user_id, 1, 200, false);
   }
 
   private static function assert_event_access(int $event_id, int $user_id): array {
@@ -303,7 +331,11 @@ class Vendor_Events_API {
     ];
   }
 
-  private static function query_events(int $user_id): array {
+  private static function analytics_cache_key(int $user_id, int $event_id = 0): string {
+    return 'koopo_tickets_analytics_' . md5($user_id . ':' . $event_id);
+  }
+
+  private static function query_events(int $user_id, int $page = 1, int $per_page = 200, bool $with_totals = false): array {
     $types = Settings::get('event_cpt');
     $types = is_array($types) ? $types : [$types];
     $types = array_filter(array_map('sanitize_key', $types));
@@ -313,11 +345,12 @@ class Vendor_Events_API {
       'post_type' => $types,
       'post_status' => 'publish',
       'author' => $user_id,
-      'posts_per_page' => 200,
+      'posts_per_page' => $per_page,
+      'paged' => $page,
       'orderby' => 'title',
       'order' => 'ASC',
       'fields' => 'ids',
-      'no_found_rows' => true,
+      'no_found_rows' => !$with_totals,
     ]);
 
     $out = [];
@@ -342,6 +375,14 @@ class Vendor_Events_API {
       ];
     }
 
-    return $out;
+    if (!$with_totals) {
+      return $out;
+    }
+
+    return [
+      'items' => $out,
+      'total' => (int) $q->found_posts,
+      'total_pages' => (int) $q->max_num_pages,
+    ];
   }
 }
