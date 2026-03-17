@@ -46,116 +46,29 @@ class Customer_Tickets_API {
       $per_page = 100;
     }
 
-    $orders_result = wc_get_orders([
-      'customer_id' => $user_id,
-      'status' => ['processing', 'completed', 'on-hold'],
-      'limit' => $per_page,
-      'paged' => $page,
-      'paginate' => true,
-      'orderby' => 'date',
-      'order' => 'DESC',
-    ]);
-
-    $orders = is_array($orders_result) ? $orders_result : ($orders_result->orders ?? []);
-    $total = is_array($orders_result) ? count($orders_result) : (int) ($orders_result->total ?? 0);
-    $total_pages = is_array($orders_result) ? 1 : (int) ($orders_result->max_num_pages ?? 0);
+    $item_page = self::get_paginated_ticket_item_ids($user_id, $page, $per_page);
 
     $out = [];
 
-    foreach ($orders as $order) {
-      foreach ($order->get_items() as $item_id => $item) {
-        $ticket_type_id = (int) $item->get_meta('_koopo_ticket_type_id');
-        $event_id = (int) $item->get_meta('_koopo_ticket_event_id');
-        $schedule_label = (string) $item->get_meta('_koopo_ticket_schedule_label');
-        $schedule_id = (int) $item->get_meta('_koopo_ticket_schedule_id');
-
-        if (!$ticket_type_id && !$event_id) continue;
-
-        $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
-        $guests = $guests_raw ? json_decode($guests_raw, true) : [];
-        if (!is_array($guests)) $guests = [];
-
-        $schedule = $schedule_id && class_exists('GeoDir_Event_Schedules')
-          ? \GeoDir_Event_Schedules::get_schedule($schedule_id)
-          : null;
-
-        $schedule_date = '';
-        $schedule_time = '';
-        if ($schedule && !empty($schedule->start_date)) {
-          $date_format = function_exists('geodir_event_date_format') ? geodir_event_date_format() : 'Y-m-d';
-          $time_format = function_exists('geodir_event_time_format') ? geodir_event_time_format() : 'H:i';
-          $start_date = $schedule->start_date;
-          $start_time = $schedule->start_time ?? '00:00:00';
-          $end_time = $schedule->end_time ?? '';
-          $schedule_date = date_i18n($date_format, strtotime($start_date));
-          if (!empty($schedule->all_day)) {
-            $schedule_time = __('All day', 'koopo-tickets');
-          } else {
-            $schedule_time = date_i18n($time_format, strtotime($start_time));
-            if (!empty($end_time)) {
-              $schedule_time .= ' - ' . date_i18n($time_format, strtotime($end_time));
-            }
-          }
-        }
-        if (!$schedule_date && !$schedule_time && $event_id) {
-          if ($schedule_id) {
-            $option = WC_Cart::get_event_date_option($event_id, $schedule_id);
-            $schedule_date = $option['date'] ?? '';
-            $schedule_time = $option['time'] ?? '';
-            if (!$schedule_label && !empty($option['label'])) {
-              $schedule_label = $option['label'];
-            }
-          }
-          if (!$schedule_date && !$schedule_time) {
-            $event_dt = WC_Cart::get_event_datetime($event_id);
-            $schedule_date = $event_dt['date'] ?? '';
-            $schedule_time = $event_dt['time'] ?? '';
-            if (!$schedule_label && !empty($event_dt['label'])) {
-              $schedule_label = $event_dt['label'];
-            }
-          }
-        }
-
-        $quantity = (int) $item->get_quantity();
-        $rows = self::get_ticket_rows($item_id);
-        if (!empty($rows)) {
-          $slots = self::build_attendee_slots_from_rows($rows, $item);
-          $ticket_status = self::derive_ticket_status($rows);
-        } else {
-          $slots = self::build_attendee_slots($item, $quantity);
-          $ticket_status = self::map_ticket_status($order->get_status());
-        }
-
-        $out[] = [
-          'order_id' => $order->get_id(),
-          'order_number' => $order->get_order_number(),
-          'item_id' => $item_id,
-          'ticket_name' => $item->get_name(),
-          'quantity' => $quantity,
-          'event_id' => $event_id,
-          'event_title' => $event_id ? get_the_title($event_id) : '',
-          'event_url' => $event_id ? get_permalink($event_id) : '',
-          'event_image' => $event_id ? get_the_post_thumbnail_url($event_id, 'medium') : '',
-          'event_location' => $event_id ? WC_Cart::get_event_location($event_id) : '',
-          'schedule_label' => $schedule_label,
-          'schedule_date' => $schedule_date,
-          'schedule_time' => $schedule_time,
-          'contact_name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
-          'contact_email' => (string) $item->get_meta('_koopo_ticket_contact_email'),
-          'contact_phone' => (string) $item->get_meta('_koopo_ticket_contact_phone'),
-          'guests' => $guests,
-          'attendees' => $slots,
-          'status' => $ticket_status,
-          'status_label' => ucfirst($ticket_status),
-        ];
+    foreach ($item_page['item_ids'] as $item_id) {
+      $item = new \WC_Order_Item_Product($item_id);
+      if (!$item || !$item->get_id()) {
+        continue;
       }
+
+      $order = wc_get_order($item->get_order_id());
+      if (!$order || (int) $order->get_user_id() !== $user_id) {
+        continue;
+      }
+
+      $out[] = self::format_ticket_item($order, $item);
     }
 
     $response = new \WP_REST_Response($out, 200);
     $response->header('X-WP-Page', (string) $page);
     $response->header('X-WP-Per-Page', (string) $per_page);
-    $response->header('X-WP-Total', (string) $total);
-    $response->header('X-WP-TotalPages', (string) $total_pages);
+    $response->header('X-WP-Total', (string) $item_page['total']);
+    $response->header('X-WP-TotalPages', (string) $item_page['total_pages']);
     return $response;
   }
 
@@ -299,6 +212,155 @@ class Customer_Tickets_API {
     if ((int) $order->get_user_id() !== get_current_user_id()) return null;
 
     return $item;
+  }
+
+  private static function get_paginated_ticket_item_ids(int $user_id, int $page, int $per_page): array {
+    global $wpdb;
+
+    $order_items_table = $wpdb->prefix . 'woocommerce_order_items';
+    $order_itemmeta_table = $wpdb->prefix . 'woocommerce_order_itemmeta';
+    $offset = ($page - 1) * $per_page;
+    $use_hpos = class_exists('\Automattic\WooCommerce\Utilities\OrderUtil')
+      && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+
+    if ($use_hpos) {
+      $orders_table = $wpdb->prefix . 'wc_orders';
+      $base_sql = "
+        FROM {$orders_table} orders
+        INNER JOIN {$order_items_table} order_items
+          ON order_items.order_id = orders.id
+          AND order_items.order_item_type = 'line_item'
+        INNER JOIN {$order_itemmeta_table} ticket_meta
+          ON ticket_meta.order_item_id = order_items.order_item_id
+          AND ticket_meta.meta_key IN ('_koopo_ticket_type_id', '_koopo_ticket_event_id')
+        WHERE orders.type = 'shop_order'
+          AND orders.status IN ('wc-processing', 'wc-completed', 'wc-on-hold')
+          AND orders.customer_id = %d
+      ";
+    } else {
+      $base_sql = "
+        FROM {$wpdb->posts} orders
+        INNER JOIN {$wpdb->postmeta} customer_meta
+          ON customer_meta.post_id = orders.ID
+          AND customer_meta.meta_key = '_customer_user'
+          AND customer_meta.meta_value = %d
+        INNER JOIN {$order_items_table} order_items
+          ON order_items.order_id = orders.ID
+          AND order_items.order_item_type = 'line_item'
+        INNER JOIN {$order_itemmeta_table} ticket_meta
+          ON ticket_meta.order_item_id = order_items.order_item_id
+          AND ticket_meta.meta_key IN ('_koopo_ticket_type_id', '_koopo_ticket_event_id')
+        WHERE orders.post_type = 'shop_order'
+          AND orders.post_status IN ('wc-processing', 'wc-completed', 'wc-on-hold')
+      ";
+    }
+
+    $total_sql = "SELECT COUNT(DISTINCT order_items.order_item_id) " . $base_sql;
+    $total = (int) $wpdb->get_var($wpdb->prepare($total_sql, $user_id));
+
+    $items_sql = "
+      SELECT DISTINCT order_items.order_item_id
+      " . $base_sql . "
+      ORDER BY " . ($use_hpos ? 'orders.date_created_gmt DESC, orders.id' : 'orders.post_date_gmt DESC, orders.ID') . " DESC, order_items.order_item_id DESC
+      LIMIT %d OFFSET %d
+    ";
+
+    $item_ids = $wpdb->get_col($wpdb->prepare($items_sql, $user_id, $per_page, $offset));
+    $item_ids = array_map('absint', is_array($item_ids) ? $item_ids : []);
+
+    return [
+      'item_ids' => $item_ids,
+      'total' => $total,
+      'total_pages' => $total > 0 ? (int) ceil($total / $per_page) : 0,
+    ];
+  }
+
+  private static function format_ticket_item(\WC_Order $order, \WC_Order_Item_Product $item): array {
+    $item_id = (int) $item->get_id();
+    $event_id = (int) $item->get_meta('_koopo_ticket_event_id');
+    $schedule_label = (string) $item->get_meta('_koopo_ticket_schedule_label');
+    $schedule_id = (int) $item->get_meta('_koopo_ticket_schedule_id');
+
+    $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
+    $guests = $guests_raw ? json_decode($guests_raw, true) : [];
+    if (!is_array($guests)) {
+      $guests = [];
+    }
+
+    $schedule = $schedule_id && class_exists('GeoDir_Event_Schedules')
+      ? \GeoDir_Event_Schedules::get_schedule($schedule_id)
+      : null;
+
+    $schedule_date = '';
+    $schedule_time = '';
+    if ($schedule && !empty($schedule->start_date)) {
+      $date_format = function_exists('geodir_event_date_format') ? geodir_event_date_format() : 'Y-m-d';
+      $time_format = function_exists('geodir_event_time_format') ? geodir_event_time_format() : 'H:i';
+      $start_date = $schedule->start_date;
+      $start_time = $schedule->start_time ?? '00:00:00';
+      $end_time = $schedule->end_time ?? '';
+      $schedule_date = date_i18n($date_format, strtotime($start_date));
+      if (!empty($schedule->all_day)) {
+        $schedule_time = __('All day', 'koopo-tickets');
+      } else {
+        $schedule_time = date_i18n($time_format, strtotime($start_time));
+        if (!empty($end_time)) {
+          $schedule_time .= ' - ' . date_i18n($time_format, strtotime($end_time));
+        }
+      }
+    }
+
+    if (!$schedule_date && !$schedule_time && $event_id) {
+      if ($schedule_id) {
+        $option = WC_Cart::get_event_date_option($event_id, $schedule_id);
+        $schedule_date = $option['date'] ?? '';
+        $schedule_time = $option['time'] ?? '';
+        if (!$schedule_label && !empty($option['label'])) {
+          $schedule_label = $option['label'];
+        }
+      }
+      if (!$schedule_date && !$schedule_time) {
+        $event_dt = WC_Cart::get_event_datetime($event_id);
+        $schedule_date = $event_dt['date'] ?? '';
+        $schedule_time = $event_dt['time'] ?? '';
+        if (!$schedule_label && !empty($event_dt['label'])) {
+          $schedule_label = $event_dt['label'];
+        }
+      }
+    }
+
+    $quantity = (int) $item->get_quantity();
+    $rows = self::get_ticket_rows($item_id);
+    if (!empty($rows)) {
+      $slots = self::build_attendee_slots_from_rows($rows, $item);
+      $ticket_status = self::derive_ticket_status($rows);
+    } else {
+      $slots = self::build_attendee_slots($item, $quantity);
+      $ticket_status = self::map_ticket_status($order->get_status());
+    }
+
+    return [
+      'order_id' => $order->get_id(),
+      'order_number' => $order->get_order_number(),
+      'item_id' => $item_id,
+      'ticket_name' => $item->get_name(),
+      'quantity' => $quantity,
+      'event_id' => $event_id,
+      'event_title' => $event_id ? get_the_title($event_id) : '',
+      'event_url' => $event_id ? get_permalink($event_id) : '',
+      'event_image' => $event_id ? get_the_post_thumbnail_url($event_id, 'medium') : '',
+      'event_location' => $event_id ? WC_Cart::get_event_location($event_id) : '',
+      'schedule_label' => $schedule_label,
+      'schedule_date' => $schedule_date,
+      'schedule_time' => $schedule_time,
+      'contact_name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
+      'contact_email' => (string) $item->get_meta('_koopo_ticket_contact_email'),
+      'contact_phone' => (string) $item->get_meta('_koopo_ticket_contact_phone'),
+      'guests' => $guests,
+      'attendees' => $slots,
+      'status' => $ticket_status,
+      'status_label' => ucfirst($ticket_status),
+    ];
   }
 
   private static function build_attendee_slots($item, int $quantity): array {
