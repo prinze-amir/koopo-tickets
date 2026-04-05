@@ -12,14 +12,30 @@ class Customer_Tickets_Print {
 
   public static function register_query_var(array $vars): array {
     $vars[] = 'koopo_ticket_print';
+    $vars[] = 'koopo_ticket_access';
+    $vars[] = 'kt_token';
     return $vars;
   }
 
   public static function maybe_render(): void {
     $item_id = absint(get_query_var('koopo_ticket_print'));
-    if (!$item_id) return;
+    $ticket_id = absint(get_query_var('koopo_ticket_access'));
+    $token = sanitize_text_field((string) (get_query_var('kt_token') ?: wp_unslash($_GET['kt_token'] ?? '')));
 
-    if (!is_user_logged_in()) {
+    $specific_ticket = null;
+    if ($ticket_id) {
+      $specific_ticket = self::get_ticket_by_id($ticket_id);
+      if (!$specific_ticket) {
+        wp_die(__('Ticket not found.', 'koopo-tickets'));
+      }
+      $item_id = (int) $specific_ticket->order_item_id;
+    }
+
+    if (!$item_id) {
+      return;
+    }
+
+    if (!$specific_ticket && !is_user_logged_in()) {
       wp_die(__('Please log in to view tickets.', 'koopo-tickets'));
     }
 
@@ -29,7 +45,14 @@ class Customer_Tickets_Print {
     }
 
     $order = wc_get_order($item->get_order_id());
-    if (!$order || (int) $order->get_user_id() !== get_current_user_id()) {
+    if (
+      !$order
+      || !self::current_user_can_view_ticket(
+        $order,
+        $specific_ticket,
+        $token
+      )
+    ) {
       wp_die(__('Ticket not found.', 'koopo-tickets'));
     }
 
@@ -52,7 +75,7 @@ class Customer_Tickets_Print {
       'phone' => (string) $item->get_meta('_koopo_ticket_contact_phone'),
     ];
 
-    $codes = self::build_attendee_codes($item, $contact);
+    $codes = self::build_attendee_codes($item, $contact, $specific_ticket ? (int) $specific_ticket->id : 0);
     $logo = self::get_site_logo();
 
     $data = [
@@ -83,11 +106,25 @@ class Customer_Tickets_Print {
     exit;
   }
 
+  public static function build_order_item_links(int $item_id): array {
+    $base = add_query_arg(['koopo_ticket_print' => $item_id], home_url('/'));
+    return self::build_links_from_base($base);
+  }
+
+  public static function build_ticket_access_links(object $ticket): array {
+    $base = add_query_arg([
+      'koopo_ticket_access' => (int) ($ticket->id ?? 0),
+      'kt_token' => self::build_ticket_access_token($ticket),
+    ], home_url('/'));
+
+    return self::build_links_from_base($base);
+  }
+
   private static function build_code(int $item_id, int $index): string {
     return 'KT-' . $item_id . '-' . $index;
   }
 
-  private static function build_attendee_codes(\WC_Order_Item_Product $item, array $contact): array {
+  private static function build_attendee_codes(\WC_Order_Item_Product $item, array $contact, int $ticket_id = 0): array {
     global $wpdb;
     $table = $wpdb->prefix . 'koopo_tickets';
     $rows = $wpdb->get_results(
@@ -98,8 +135,26 @@ class Customer_Tickets_Print {
     );
 
     if (!empty($rows)) {
+      $transfer_map = Customer_Ticket_Transfers::get_transfers_by_ticket_ids(array_map(function ($row) {
+        return (int) ($row->id ?? 0);
+      }, $rows), ['accepted']);
+      $owner_user_id = 0;
+      $order = wc_get_order($item->get_order_id());
+      if ($order instanceof \WC_Order) {
+        $owner_user_id = (int) $order->get_user_id();
+      }
+      $viewer_user_id = get_current_user_id();
       $codes = [];
       foreach ($rows as $row) {
+        if ($ticket_id > 0 && (int) $row->id !== $ticket_id) {
+          continue;
+        }
+
+        $transfer = $transfer_map[(int) ($row->id ?? 0)] ?? null;
+        if ($ticket_id === 0 && self::viewer_is_original_owner($viewer_user_id, $owner_user_id) && $transfer) {
+          continue;
+        }
+
         $label = $row->attendee_name ?: sprintf(__('Guest %d', 'koopo-tickets'), (int) $row->attendee_index);
         if ((int) $row->attendee_index === 1 && $contact['name']) {
           $label = $contact['name'];
@@ -218,5 +273,66 @@ class Customer_Tickets_Print {
 
     $url = add_query_arg(['kt_code' => $payload], $base);
     return (string) apply_filters('koopo_tickets_verification_url', $url, $payload);
+  }
+
+  private static function build_links_from_base(string $base): array {
+    return [
+      'view' => $base,
+      'print' => add_query_arg(['kt_action' => 'print'], $base),
+      'download' => add_query_arg(['kt_action' => 'download'], $base),
+    ];
+  }
+
+  private static function build_ticket_access_token(object $ticket): string {
+    $payload = implode('|', [
+      (int) ($ticket->id ?? 0),
+      (int) ($ticket->order_item_id ?? 0),
+      strtolower(sanitize_email((string) ($ticket->attendee_email ?? ''))),
+      (string) ($ticket->code ?? ''),
+    ]);
+
+    return hash_hmac('sha256', $payload, wp_salt('auth'));
+  }
+
+  private static function current_user_can_view_ticket(\WC_Order $order, ?object $ticket, string $token): bool {
+    $user_id = get_current_user_id();
+    if ($user_id && (int) $order->get_user_id() === $user_id && !self::ticket_is_accepted_transfer($ticket)) {
+      return true;
+    }
+
+    if ($user_id && $ticket && (int) ($ticket->attendee_user_id ?? 0) === $user_id) {
+      return true;
+    }
+
+    if (!$ticket || !$token) {
+      return false;
+    }
+
+    return hash_equals(self::build_ticket_access_token($ticket), $token);
+  }
+
+  private static function viewer_is_original_owner(int $viewer_user_id, int $owner_user_id): bool {
+    return $viewer_user_id > 0 && $owner_user_id > 0 && $viewer_user_id === $owner_user_id;
+  }
+
+  private static function ticket_is_accepted_transfer(?object $ticket): bool {
+    if (!$ticket || empty($ticket->id)) {
+      return false;
+    }
+
+    return (bool) Customer_Ticket_Transfers::get_transfer_by_ticket_id((int) $ticket->id, ['accepted']);
+  }
+
+  private static function get_ticket_by_id(int $ticket_id) {
+    global $wpdb;
+
+    if ($ticket_id < 1) {
+      return null;
+    }
+
+    $table = $wpdb->prefix . 'koopo_tickets';
+    return $wpdb->get_row(
+      $wpdb->prepare("SELECT * FROM {$table} WHERE id = %d LIMIT 1", $ticket_id)
+    );
   }
 }

@@ -24,13 +24,27 @@ final class Koopo_Tickets {
   }
 
   private function __construct() {
+    add_action('before_woocommerce_init', [$this, 'declare_woocommerce_compatibility']);
     add_action('plugins_loaded', [$this, 'boot'], 20);
     register_activation_hook(__FILE__, [$this, 'activate']);
+    register_deactivation_hook(__FILE__, [$this, 'deactivate']);
   }
 
   public function activate() {
     require_once __DIR__ . '/includes/core/class-kt-db.php';
+    require_once __DIR__ . '/includes/customer/class-kt-customer-tickets-dashboard.php';
     Koopo_Tickets\DB::create_tables();
+    Koopo_Tickets\Customer_Tickets_Dashboard::flush_rewrite_rules();
+  }
+
+  public function deactivate() {
+    flush_rewrite_rules();
+  }
+
+  public function declare_woocommerce_compatibility() {
+    if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
+      \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, true);
+    }
   }
 
   public function boot() {
@@ -52,9 +66,13 @@ final class Koopo_Tickets {
     require_once __DIR__ . '/includes/woocommerce/class-kt-wc-order-tickets.php';
     require_once __DIR__ . '/includes/frontend/class-kt-ticket-cards.php';
     require_once __DIR__ . '/includes/customer/class-kt-customer-tickets-dashboard.php';
+    require_once __DIR__ . '/includes/customer/class-kt-customer-ticket-transfers.php';
     require_once __DIR__ . '/includes/customer/class-kt-customer-tickets-api.php';
     require_once __DIR__ . '/includes/customer/class-kt-customer-tickets-print.php';
     require_once __DIR__ . '/includes/customer/class-kt-public-ticket-types-api.php';
+    if (defined('WP_CLI') && WP_CLI) {
+      require_once __DIR__ . '/includes/cli/class-kt-cli-tests.php';
+    }
 
     Koopo_Tickets\DB::maybe_upgrade();
     Koopo_Tickets\Settings::init();
@@ -69,9 +87,13 @@ final class Koopo_Tickets {
     Koopo_Tickets\WC_Order_Tickets::init();
     Koopo_Tickets\Ticket_Cards::init();
     Koopo_Tickets\Customer_Tickets_Dashboard::init();
+    Koopo_Tickets\Customer_Ticket_Transfers::init();
     Koopo_Tickets\Customer_Tickets_API::init();
     Koopo_Tickets\Customer_Tickets_Print::init();
     Koopo_Tickets\Public_Ticket_Types_API::init();
+    if (defined('WP_CLI') && WP_CLI) {
+      Koopo_Tickets\CLI_Tests::init();
+    }
   }
 }
 

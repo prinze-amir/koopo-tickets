@@ -66,6 +66,7 @@ if (function_exists('geodir_add_listing_page_url')) {
     <div class="koopo-tickets-card" id="koopo-event-selector-card">
       <h3><?php echo esc_html__('Select Event', 'koopo-tickets'); ?></h3>
       <div id="koopo-event-grid" class="koopo-event-grid"></div>
+      <div id="koopo-event-pagination" class="koopo-tickets-pagination" style="display:none;"></div>
       <p id="koopo-event-empty" class="koopo-tickets-note" style="display:none;"><?php echo esc_html__('No events found for your account.', 'koopo-tickets'); ?></p>
     </div>
 
@@ -109,27 +110,30 @@ if (function_exists('geodir_add_listing_page_url')) {
           </select>
         </div>
       </div>
-      <table class="koopo-tickets-table">
-        <thead>
-          <tr>
-            <th><?php echo esc_html__('Ticket', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('Event', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('Price', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('Capacity', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('Status', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('Visibility', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('Sales Rule', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('SKU', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('Product', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('Variation', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('Max/Order', 'koopo-tickets'); ?></th>
-            <th><?php echo esc_html__('Actions', 'koopo-tickets'); ?></th>
-          </tr>
-        </thead>
-        <tbody id="koopo-ticket-types-body">
-          <tr><td colspan="12"><?php echo esc_html__('Loading...', 'koopo-tickets'); ?></td></tr>
-        </tbody>
-      </table>
+      <div class="koopo-tickets-table-wrap">
+        <table class="koopo-tickets-table">
+          <thead>
+            <tr>
+              <th><?php echo esc_html__('Ticket', 'koopo-tickets'); ?></th>
+              <th><?php echo esc_html__('Event', 'koopo-tickets'); ?></th>
+              <th><?php echo esc_html__('Price', 'koopo-tickets'); ?></th>
+              <th><?php echo esc_html__('Capacity', 'koopo-tickets'); ?></th>
+              <th><?php echo esc_html__('Status', 'koopo-tickets'); ?></th>
+              <th><?php echo esc_html__('Visibility', 'koopo-tickets'); ?></th>
+              <th><?php echo esc_html__('Sales Rule', 'koopo-tickets'); ?></th>
+              <th><?php echo esc_html__('SKU', 'koopo-tickets'); ?></th>
+              <th><?php echo esc_html__('Product', 'koopo-tickets'); ?></th>
+              <th><?php echo esc_html__('Variation', 'koopo-tickets'); ?></th>
+              <th><?php echo esc_html__('Max/Order', 'koopo-tickets'); ?></th>
+              <th><?php echo esc_html__('Actions', 'koopo-tickets'); ?></th>
+            </tr>
+          </thead>
+          <tbody id="koopo-ticket-types-body">
+            <tr class="koopo-tickets-table__message-row"><td class="koopo-tickets-table__message" colspan="12"><?php echo esc_html__('Loading...', 'koopo-tickets'); ?></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="koopo-ticket-types-pagination" class="koopo-tickets-pagination" style="display:none;"></div>
       </div>
 
       <div class="koopo-tickets-card">

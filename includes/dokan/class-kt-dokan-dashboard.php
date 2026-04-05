@@ -65,6 +65,8 @@ class Dokan_Dashboard {
       'userId' => get_current_user_id(),
       'events' => Vendor_Events_API::get_events_for_user(get_current_user_id()),
       'currency_symbol' => function_exists('get_woocommerce_currency_symbol') ? get_woocommerce_currency_symbol() : '$',
+      'events_per_page' => 12,
+      'tickets_per_page' => 10,
     ]);
   }
 }

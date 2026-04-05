@@ -64,7 +64,7 @@ class Customer_Tickets_Dashboard {
     if (!is_user_logged_in()) return;
 
     $load_assets = false;
-    if (is_account_page() && function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('tickets')) {
+    if (function_exists('is_account_page') && is_account_page()) {
       $load_assets = true;
     }
 
@@ -87,13 +87,19 @@ class Customer_Tickets_Dashboard {
     wp_localize_script('koopo-ticket-dashboard', 'KOOPO_TICKETS_DASH', [
       'api_url' => rest_url('koopo/v1'),
       'nonce' => wp_create_nonce('wp_rest'),
+      'per_page' => 10,
       'i18n' => [
         'loading' => __('Loading...', 'koopo-tickets'),
         'no_tickets' => __('No tickets found yet.', 'koopo-tickets'),
         'save_success' => __('Guest details saved.', 'koopo-tickets'),
         'save_error' => __('Unable to save guest details.', 'koopo-tickets'),
-        'send_success' => __('Tickets sent successfully.', 'koopo-tickets'),
+        'send_success' => __('Transfer invite sent.', 'koopo-tickets'),
         'send_error' => __('Unable to send tickets. Please try again.', 'koopo-tickets'),
+        'cancel_transfer_success' => __('Pending transfer cancelled.', 'koopo-tickets'),
+        'cancel_transfer_error' => __('Unable to cancel transfer.', 'koopo-tickets'),
+        'pagination_prev' => __('Previous', 'koopo-tickets'),
+        'pagination_next' => __('Next', 'koopo-tickets'),
+        'pagination_label' => __('Page %1$s of %2$s', 'koopo-tickets'),
       ],
     ]);
   }

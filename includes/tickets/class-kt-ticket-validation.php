@@ -36,6 +36,10 @@ class Ticket_Validation {
     if (!self::current_user_can_access_ticket($ticket)) {
       return new \WP_REST_Response(['error' => 'Forbidden'], 403);
     }
+    $inactive_reason = self::get_inactive_reason($ticket);
+    if ($inactive_reason) {
+      return new \WP_REST_Response(['error' => $inactive_reason], 410);
+    }
 
     return new \WP_REST_Response(self::format_ticket($ticket), 200);
   }
@@ -50,11 +54,30 @@ class Ticket_Validation {
       return new \WP_REST_Response(['error' => 'Forbidden'], 403);
     }
 
-    if ($ticket->status === 'redeemed') {
-      return new \WP_REST_Response(['error' => 'Ticket already redeemed'], 409);
+    $inactive_reason = self::get_inactive_reason($ticket);
+    if ($inactive_reason) {
+      return new \WP_REST_Response(['error' => $inactive_reason], 410);
     }
 
-    self::update_ticket_status($ticket->id, 'redeemed');
+    if (!self::redeem_ticket_row((int) $ticket->id)) {
+      $ticket = self::get_ticket_by_id((int) $ticket->id);
+      if (!$ticket) {
+        return new \WP_REST_Response(['error' => 'Ticket not found'], 404);
+      }
+
+      $inactive_reason = self::get_inactive_reason($ticket);
+      if ($inactive_reason) {
+        return new \WP_REST_Response(['error' => $inactive_reason], 410);
+      }
+
+      if ((string) $ticket->status === 'redeemed') {
+        return new \WP_REST_Response(['error' => 'Ticket already redeemed'], 409);
+      }
+
+      return new \WP_REST_Response(['error' => 'Unable to redeem ticket'], 409);
+    }
+
+    $ticket = self::get_ticket_by_id((int) $ticket->id) ?: $ticket;
     $ticket->status = 'redeemed';
 
     return new \WP_REST_Response(self::format_ticket($ticket), 200);
@@ -85,13 +108,63 @@ class Ticket_Validation {
     return self::get_ticket_by_code($payload);
   }
 
-  private static function update_ticket_status(int $ticket_id, string $status): void {
+  private static function redeem_ticket_row(int $ticket_id): bool {
     global $wpdb;
+
+    if ($ticket_id < 1) {
+      return false;
+    }
+
     $table = $wpdb->prefix . 'koopo_tickets';
-    $wpdb->update($table, [
-      'status' => $status,
-      'updated_at' => gmdate('Y-m-d H:i:s'),
-    ], ['id' => $ticket_id], ['%s', '%s'], ['%d']);
+    $updated = $wpdb->query($wpdb->prepare(
+      "UPDATE {$table}
+       SET status = %s, updated_at = %s
+       WHERE id = %d
+         AND status NOT IN (%s, %s, %s)",
+      'redeemed',
+      gmdate('Y-m-d H:i:s'),
+      $ticket_id,
+      'redeemed',
+      'refunded',
+      'cancelled'
+    ));
+
+    return (int) $updated > 0;
+  }
+
+  private static function get_inactive_reason(object $ticket): string {
+    $status = (string) ($ticket->status ?? '');
+    if ($status === 'refunded') {
+      return 'Ticket has been refunded';
+    }
+    if ($status === 'cancelled') {
+      return 'Ticket has been cancelled';
+    }
+
+    $order = self::get_order_for_ticket($ticket);
+    if (!$order) {
+      return 'Ticket order not found';
+    }
+
+    if (!self::is_active_order_status((string) $order->get_status())) {
+      return 'Ticket is no longer valid';
+    }
+
+    return '';
+  }
+
+  private static function get_order_for_ticket(object $ticket): ?\WC_Order {
+    $order_id = (int) ($ticket->order_id ?? 0);
+    if ($order_id < 1) {
+      return null;
+    }
+
+    $order = wc_get_order($order_id);
+    return $order instanceof \WC_Order ? $order : null;
+  }
+
+  private static function is_active_order_status(string $status): bool {
+    return in_array($status, ['processing', 'completed', 'on-hold'], true);
   }
 
   private static function current_user_can_access_ticket(object $ticket): bool {

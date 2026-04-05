@@ -13,6 +13,18 @@
   var currentStep = 1;
   var totalSteps = 2;
   var analyticsPalette = ['#1f5fbf', '#ff8c00', '#2d9d78', '#6d4cce', '#d93f6f', '#f4b400', '#0097a7', '#7b8a8b', '#e65100', '#3949ab'];
+  var eventsState = {
+    items: Array.isArray(api.events) ? api.events : [],
+    currentPage: 1,
+    totalPages: 1,
+    perPage: parseInt(api.events_per_page || 12, 10) || 12
+  };
+  var ticketsState = {
+    items: [],
+    currentPage: 1,
+    totalPages: 1,
+    perPage: parseInt(api.tickets_per_page || 10, 10) || 10
+  };
 
   function isMobileViewport() {
     return window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
@@ -96,6 +108,34 @@
     if (isNaN(amount)) amount = 0;
     if (api.currency_symbol) return api.currency_symbol + amount.toFixed(2);
     return amount.toFixed(2);
+  }
+
+  function renderPagination(containerSelector, current, total, type) {
+    var $container = $(containerSelector);
+    if (!$container.length) return;
+
+    if (total <= 1) {
+      $container.hide().empty();
+      return;
+    }
+
+    var pages = [];
+    var start = Math.max(1, current - 2);
+    var end = Math.min(total, current + 2);
+    for (var page = start; page <= end; page += 1) {
+      pages.push(
+        '<button type="button" class="button koopo-tickets-page' + (page === current ? ' is-current' : '') + '" data-page-type="' + type + '" data-page="' + page + '">' +
+          page +
+        '</button>'
+      );
+    }
+
+    $container.html(
+      '<button type="button" class="button koopo-tickets-page-nav" data-page-type="' + type + '" data-page="' + (current - 1) + '"' + (current <= 1 ? ' disabled' : '') + '>Previous</button>' +
+      '<div class="koopo-tickets-pagination__pages">' + pages.join('') + '</div>' +
+      '<span class="koopo-tickets-pagination__label">Page ' + current + ' of ' + total + '</span>' +
+      '<button type="button" class="button koopo-tickets-page-nav" data-page-type="' + type + '" data-page="' + (current + 1) + '"' + (current >= total ? ' disabled' : '') + '>Next</button>'
+    ).show();
   }
 
   function renderAnalytics(data) {
@@ -187,10 +227,15 @@
   }
 
   function getEventById(eventId) {
-    if (!api.events || !api.events.length) return null;
+    if (!eventsState.items || !eventsState.items.length) {
+      if (selectedEvent && parseInt(selectedEvent.id, 10) === parseInt(eventId || 0, 10)) {
+        return selectedEvent;
+      }
+      return null;
+    }
     var id = parseInt(eventId || 0, 10);
     if (!id) return null;
-    return api.events.find(function (ev) { return ev.id === id; }) || null;
+    return eventsState.items.find(function (ev) { return ev.id === id; }) || (selectedEvent && selectedEvent.id === id ? selectedEvent : null);
   }
 
   function eventMetaText(eventObj) {
@@ -208,10 +253,11 @@
     var $empty = $('#koopo-event-empty');
     if (!$grid.length) return;
 
-    var events = Array.isArray(api.events) ? api.events : [];
+    var events = Array.isArray(eventsState.items) ? eventsState.items : [];
     if (!events.length) {
       $grid.empty();
       $empty.show();
+      renderPagination('#koopo-event-pagination', 1, 1, 'events');
       return;
     }
 
@@ -228,6 +274,7 @@
 
     $grid.html(html);
     $empty.hide();
+    renderPagination('#koopo-event-pagination', eventsState.currentPage, eventsState.totalPages, 'events');
   }
 
   function setSelectedEvent(eventId) {
@@ -251,7 +298,8 @@
 
     resetTicketForm();
     renderDatePrices(selectedEventId, {});
-    loadTickets();
+    ticketsState.currentPage = 1;
+    loadTickets(1);
 
     if (isMobileViewport()) {
       var workspace = document.getElementById('koopo-ticket-workspace');
@@ -261,70 +309,100 @@
     }
   }
 
-  function applyFilters(items) {
-    var search = ($('#koopo-ticket-filter-search').val() || '').toLowerCase();
-    var status = $('#koopo-ticket-filter-status').val();
-    var visibility = $('#koopo-ticket-filter-visibility').val();
-
-    return items.filter(function (item) {
-      if (selectedEventId && parseInt(item.event_id, 10) !== selectedEventId) return false;
-      if (search && String(item.title || '').toLowerCase().indexOf(search) === -1) return false;
-      if (status && item.status !== status) return false;
-      if (visibility && item.visibility !== visibility) return false;
-      return true;
-    });
-  }
-
   function renderRows(items) {
     var $body = $('#koopo-ticket-types-body');
     if (!$body.length) return;
 
     if (!selectedEventId) {
-      $body.html('<tr><td colspan="12">Select an event first.</td></tr>');
+      $body.html('<tr class="koopo-tickets-table__message-row"><td class="koopo-tickets-table__message" colspan="12">Select an event first.</td></tr>');
+      renderPagination('#koopo-ticket-types-pagination', 1, 1, 'tickets');
       return;
     }
 
     if (!items.length) {
-      $body.html('<tr><td colspan="12">No ticket types yet.</td></tr>');
+      $body.html('<tr class="koopo-tickets-table__message-row"><td class="koopo-tickets-table__message" colspan="12">No ticket types yet.</td></tr>');
+      renderPagination('#koopo-ticket-types-pagination', ticketsState.currentPage, ticketsState.totalPages, 'tickets');
       return;
     }
 
     var rows = items.map(function (item) {
       var eventTitle = item.event_title || '—';
       return '<tr>' +
-        '<td>' + escapeHtml(item.title || '') + '</td>' +
-        '<td>' + escapeHtml(eventTitle) + '</td>' +
-        '<td>' + fmtCurrency(item.price) + '</td>' +
-        '<td>' + (item.capacity || '—') + '</td>' +
-        '<td>' + statusBadge(item.status) + '</td>' +
-        '<td>' + (item.visibility || 'public') + '</td>' +
-        '<td>' + fmtSalesRule(item.sales_mode, item.sales_start, item.sales_end) + '</td>' +
-        '<td>' + (item.sku || '—') + '</td>' +
-        '<td>' + (item.product_id ? ('#' + item.product_id) : '—') + '</td>' +
-        '<td>' + (item.variation_id ? ('#' + item.variation_id) : '—') + '</td>' +
-        '<td>' + (item.max_per_order ? item.max_per_order : '—') + '</td>' +
-        '<td>' +
-          '<button class="button koopo-edit-ticket" data-id="' + item.id + '">Edit</button> ' +
+        '<td data-label="Ticket">' + escapeHtml(item.title || '') + '</td>' +
+        '<td data-label="Event">' + escapeHtml(eventTitle) + '</td>' +
+        '<td data-label="Price">' + fmtCurrency(item.price) + '</td>' +
+        '<td data-label="Capacity">' + (item.capacity || '—') + '</td>' +
+        '<td data-label="Status">' + statusBadge(item.status) + '</td>' +
+        '<td data-label="Visibility">' + (item.visibility || 'public') + '</td>' +
+        '<td data-label="Sales Rule">' + fmtSalesRule(item.sales_mode, item.sales_start, item.sales_end) + '</td>' +
+        '<td data-label="SKU">' + (item.sku || '—') + '</td>' +
+        '<td data-label="Product">' + (item.product_id ? ('#' + item.product_id) : '—') + '</td>' +
+        '<td data-label="Variation">' + (item.variation_id ? ('#' + item.variation_id) : '—') + '</td>' +
+        '<td data-label="Max/Order">' + (item.max_per_order ? item.max_per_order : '—') + '</td>' +
+        '<td data-label="Actions"><div class="koopo-tickets-table__actions">' +
+          '<button class="button koopo-edit-ticket" data-id="' + item.id + '">Edit</button>' +
           '<button class="button koopo-delete-ticket" data-id="' + item.id + '">Delete</button>' +
-        '</td>' +
+        '</div></td>' +
       '</tr>';
     }).join('');
 
     $body.html(rows);
+    renderPagination('#koopo-ticket-types-pagination', ticketsState.currentPage, ticketsState.totalPages, 'tickets');
   }
 
-  function loadTickets() {
+  function loadTickets(page) {
     if (!selectedEventId) {
       renderRows([]);
       return;
     }
 
-    request('ticket-types?event_id=' + encodeURIComponent(selectedEventId), 'GET').done(function (items) {
-      var filtered = applyFilters(items || []);
-      renderRows(filtered);
+    ticketsState.currentPage = page || 1;
+    var search = $('#koopo-ticket-filter-search').val() || '';
+    var status = $('#koopo-ticket-filter-status').val() || '';
+    var visibility = $('#koopo-ticket-filter-visibility').val() || '';
+    var query = [
+      'event_id=' + encodeURIComponent(selectedEventId),
+      'page=' + encodeURIComponent(ticketsState.currentPage),
+      'per_page=' + encodeURIComponent(ticketsState.perPage)
+    ];
+
+    if (search) query.push('search=' + encodeURIComponent(search));
+    if (status) query.push('status=' + encodeURIComponent(status));
+    if (visibility) query.push('visibility=' + encodeURIComponent(visibility));
+
+    request('ticket-types?' + query.join('&'), 'GET').done(function (items, _textStatus, xhr) {
+      ticketsState.items = items || [];
+      ticketsState.currentPage = parseInt(xhr.getResponseHeader('X-WP-Page'), 10) || ticketsState.currentPage;
+      ticketsState.totalPages = parseInt(xhr.getResponseHeader('X-WP-TotalPages'), 10) || 1;
+      renderRows(ticketsState.items);
     }).fail(function () {
-      $('#koopo-ticket-types-body').html('<tr><td colspan="12">Unable to load ticket types.</td></tr>');
+      $('#koopo-ticket-types-body').html('<tr class="koopo-tickets-table__message-row"><td class="koopo-tickets-table__message" colspan="12">Unable to load ticket types.</td></tr>');
+      renderPagination('#koopo-ticket-types-pagination', 1, 1, 'tickets');
     });
+  }
+
+  function loadEvents(page) {
+    eventsState.currentPage = page || 1;
+    request('vendor/events?page=' + encodeURIComponent(eventsState.currentPage) + '&per_page=' + encodeURIComponent(eventsState.perPage), 'GET')
+      .done(function (items, _textStatus, xhr) {
+        eventsState.items = items || [];
+        eventsState.currentPage = parseInt(xhr.getResponseHeader('X-WP-Page'), 10) || eventsState.currentPage;
+        eventsState.totalPages = parseInt(xhr.getResponseHeader('X-WP-TotalPages'), 10) || 1;
+
+        if (selectedEventId) {
+          var refreshed = getEventById(selectedEventId);
+          if (refreshed) {
+            selectedEvent = refreshed;
+          }
+        }
+
+        renderEventCards();
+      })
+      .fail(function () {
+        eventsState.items = [];
+        eventsState.totalPages = 1;
+        renderEventCards();
+      });
   }
 
   function buildDateIndex(dates) {
@@ -762,10 +840,10 @@
 
   function bindFilters() {
     $('#koopo-ticket-filter-search').on('input', function () {
-      loadTickets();
+      loadTickets(1);
     });
     $('#koopo-ticket-filter-status, #koopo-ticket-filter-visibility').on('change', function () {
-      loadTickets();
+      loadTickets(1);
     });
   }
 
@@ -819,12 +897,32 @@
     });
   }
 
+  function bindPagination() {
+    $(document).on('click', '.koopo-tickets-page, .koopo-tickets-page-nav', function () {
+      var page = parseInt($(this).data('page'), 10) || 0;
+      var type = $(this).data('page-type');
+      if (!page || page < 1) return;
+
+      if (type === 'events') {
+        if (page === eventsState.currentPage || page > eventsState.totalPages) return;
+        loadEvents(page);
+        return;
+      }
+
+      if (type === 'tickets') {
+        if (page === ticketsState.currentPage || page > ticketsState.totalPages) return;
+        loadTickets(page);
+      }
+    });
+  }
+
   $(function () {
     renderEventCards();
     renderRows([]);
     renderAnalytics(null);
     loadAnalytics();
     syncMobileEventMode();
+    loadEvents(1);
 
     bindCreate();
     bindDelete();
@@ -832,6 +930,7 @@
     bindFilters();
     bindModal();
     bindEventSelection();
+    bindPagination();
 
     $(window).on('resize orientationchange', function () {
       syncMobileEventMode();

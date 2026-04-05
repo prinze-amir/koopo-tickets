@@ -114,8 +114,20 @@ class Vendor_Events_API {
     global $wpdb;
 
     $tickets_table = $wpdb->prefix . 'koopo_tickets';
-    $base_where = "tt.post_author = %d AND tt.post_type = %s";
-    $where_args = [$user_id, Ticket_Types_CPT::POST_TYPE];
+    $use_hpos = class_exists('\Automattic\WooCommerce\Utilities\OrderUtil')
+      && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+    $orders_join_sql = $use_hpos
+      ? "INNER JOIN {$wpdb->prefix}wc_orders orders ON orders.id = t.order_id"
+      : "INNER JOIN {$wpdb->posts} orders ON orders.ID = t.order_id";
+    $orders_where_sql = $use_hpos
+      ? "orders.type = 'shop_order' AND orders.status IN ('wc-processing', 'wc-completed', 'wc-on-hold')"
+      : "orders.post_type = 'shop_order' AND orders.post_status IN ('wc-processing', 'wc-completed', 'wc-on-hold')";
+
+    $base_where = "tt.post_author = %d
+      AND tt.post_type = %s
+      AND t.status NOT IN (%s, %s)
+      AND {$orders_where_sql}";
+    $where_args = [$user_id, Ticket_Types_CPT::POST_TYPE, 'refunded', 'cancelled'];
 
     if ($event_id > 0) {
       $base_where .= " AND t.event_id = %d";
@@ -125,6 +137,7 @@ class Vendor_Events_API {
     $sold_count_sql = "SELECT COUNT(1)
       FROM {$tickets_table} t
       INNER JOIN {$wpdb->posts} tt ON tt.ID = t.ticket_type_id
+      {$orders_join_sql}
       WHERE {$base_where}";
     $tickets_sold = (int) $wpdb->get_var($wpdb->prepare($sold_count_sql, $where_args));
 
@@ -135,6 +148,7 @@ class Vendor_Events_API {
         SELECT t.event_id, t.order_id, t.order_item_id
         FROM {$tickets_table} t
         INNER JOIN {$wpdb->posts} tt ON tt.ID = t.ticket_type_id
+        {$orders_join_sql}
         WHERE {$base_where}
         GROUP BY t.event_id, t.order_id, t.order_item_id
       ) ti

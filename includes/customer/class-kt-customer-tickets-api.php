@@ -28,6 +28,12 @@ class Customer_Tickets_API {
       'permission_callback' => fn() => is_user_logged_in(),
     ]);
 
+    register_rest_route('koopo/v1', '/customer/tickets/(?P<item_id>\d+)/transfer/cancel', [
+      'methods' => 'POST',
+      'callback' => [__CLASS__, 'cancel_transfer'],
+      'permission_callback' => fn() => is_user_logged_in(),
+    ]);
+
     register_rest_route('koopo/v1', '/customer/friends', [
       'methods' => 'GET',
       'callback' => [__CLASS__, 'list_friends'],
@@ -46,12 +52,29 @@ class Customer_Tickets_API {
       $per_page = 100;
     }
 
-    $item_page = self::get_paginated_ticket_item_ids($user_id, $page, $per_page);
+    $item_page = self::get_paginated_ticket_entries($user_id, $page, $per_page);
 
     $out = [];
 
-    foreach ($item_page['item_ids'] as $item_id) {
-      $item = new \WC_Order_Item_Product($item_id);
+    foreach ($item_page['entries'] as $entry) {
+      $entry_type = (string) ($entry['entry_type'] ?? '');
+      $entry_id = absint($entry['entry_id'] ?? 0);
+      if (!$entry_id) {
+        continue;
+      }
+
+      if ($entry_type === 'received_ticket') {
+        $ticket = self::get_ticket_by_id($entry_id);
+        if ($ticket) {
+          $formatted = self::format_received_ticket($ticket, $user_id);
+          if (is_array($formatted)) {
+            $out[] = $formatted;
+          }
+        }
+        continue;
+      }
+
+      $item = new \WC_Order_Item_Product($entry_id);
       if (!$item || !$item->get_id()) {
         continue;
       }
@@ -61,7 +84,10 @@ class Customer_Tickets_API {
         continue;
       }
 
-      $out[] = self::format_ticket_item($order, $item);
+      $formatted = self::format_ticket_item($order, $item);
+      if (is_array($formatted)) {
+        $out[] = $formatted;
+      }
     }
 
     $response = new \WP_REST_Response($out, 200);
@@ -80,16 +106,64 @@ class Customer_Tickets_API {
     $guests = $req->get_param('guests');
     if (!is_array($guests)) $guests = [];
 
-    $clean = [];
+    $submitted_by_slot = [];
     foreach ($guests as $guest) {
       if (!is_array($guest)) continue;
-      $clean[] = [
+      $slot_index = array_key_exists('slot_index', $guest) ? max(0, absint($guest['slot_index'])) : count($submitted_by_slot);
+      $submitted_by_slot[$slot_index] = [
         'user_id' => absint($guest['user_id'] ?? 0),
         'name' => sanitize_text_field($guest['name'] ?? ''),
         'email' => sanitize_email($guest['email'] ?? ''),
         'phone' => sanitize_text_field($guest['phone'] ?? ''),
         'ticket_type_id' => absint($guest['ticket_type_id'] ?? 0),
         'ticket_name' => sanitize_text_field($guest['ticket_name'] ?? ''),
+      ];
+    }
+
+    $existing_guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
+    $existing_guests = $existing_guests_raw ? json_decode($existing_guests_raw, true) : [];
+    if (!is_array($existing_guests)) {
+      $existing_guests = [];
+    }
+
+    $max_slots = max(0, (int) $item->get_quantity() - 1);
+    $rows = self::get_ticket_rows((int) $item->get_id());
+    foreach ($rows as $row) {
+      if ((int) ($row->attendee_index ?? 0) <= 1) {
+        continue;
+      }
+
+      $slot_index = (int) $row->attendee_index - 2;
+      $max_slots = max($max_slots, $slot_index + 1);
+    }
+
+    $clean = [];
+    for ($slot_index = 0; $slot_index < $max_slots; $slot_index++) {
+      $row = self::get_ticket_by_index((int) $item->get_id(), $slot_index + 2);
+      $locked_transfer = $row
+        ? Customer_Ticket_Transfers::get_transfer_by_ticket_id((int) ($row->id ?? 0), ['pending', 'accepted'])
+        : null;
+
+      if ($row && ($locked_transfer || (string) ($row->status ?? '') === 'transferred')) {
+        $clean[$slot_index] = $existing_guests[$slot_index] ?? [
+          'user_id' => (int) ($row->attendee_user_id ?? 0),
+          'name' => (string) ($row->attendee_name ?? ''),
+          'email' => (string) ($row->attendee_email ?? ''),
+          'phone' => (string) ($row->attendee_phone ?? ''),
+        ];
+        continue;
+      }
+
+      if (array_key_exists($slot_index, $submitted_by_slot)) {
+        $clean[$slot_index] = $submitted_by_slot[$slot_index];
+        continue;
+      }
+
+      $clean[$slot_index] = $existing_guests[$slot_index] ?? [
+        'user_id' => 0,
+        'name' => '',
+        'email' => '',
+        'phone' => '',
       ];
     }
 
@@ -124,10 +198,11 @@ class Customer_Tickets_API {
 
     if ($user_id) {
       $user = get_user_by('id', $user_id);
-      if ($user) {
-        $name = $user->display_name;
-        $email = $user->user_email;
+      if (!$user) {
+        return new \WP_REST_Response(['error' => 'Assigned user not found'], 404);
       }
+      $name = $user->display_name;
+      $email = $user->user_email;
     }
 
     if (!$email && $ticket) {
@@ -140,27 +215,100 @@ class Customer_Tickets_API {
       return new \WP_REST_Response(['error' => 'Guest email is required'], 400);
     }
 
-    if ($ticket) {
-      self::update_ticket_recipient($ticket, [
-        'name' => $name,
-        'email' => $email,
-        'phone' => $phone,
-        'user_id' => $user_id,
-      ]);
+    if (!$ticket) {
+      return new \WP_REST_Response(['error' => 'Ticket record not found for this attendee'], 409);
     }
+
+    $current_status = (string) ($ticket->status ?? '');
+    if ($current_status === 'redeemed') {
+      return new \WP_REST_Response(['error' => 'Redeemed tickets cannot be reassigned'], 409);
+    }
+    if ($current_status === 'transferred') {
+      return new \WP_REST_Response(['error' => 'Accepted transferred tickets cannot be reassigned'], 409);
+    }
+    if (in_array($current_status, ['refunded', 'cancelled'], true)) {
+      return new \WP_REST_Response(['error' => 'Inactive tickets cannot be reassigned'], 409);
+    }
+
+    $transfer = Customer_Ticket_Transfers::upsert_pending_transfer($ticket, [
+      'name' => $name,
+      'email' => $email,
+      'phone' => $phone,
+      'user_id' => $user_id,
+    ], get_current_user_id());
+    if (is_wp_error($transfer)) {
+      return new \WP_REST_Response(['error' => $transfer->get_error_message()], 400);
+    }
+
+    $accept_url = Customer_Ticket_Transfers::build_accept_url($transfer);
+    $event_title = '';
+    $event_id = (int) $item->get_meta('_koopo_ticket_event_id');
+    if ($event_id) {
+      $event_title = (string) get_the_title($event_id);
+    }
+    $schedule_label = (string) $item->get_meta('_koopo_ticket_schedule_label');
 
     $subject = __('Your ticket details', 'koopo-tickets');
     $body = sprintf(
-      "%s\n\n%s: %s\n%s: %s\n",
-      __('You have been assigned a ticket.', 'koopo-tickets'),
+      "%s\n\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n",
+      __('A ticket has been offered to you. Accept it to take ownership.', 'koopo-tickets'),
       __('Ticket', 'koopo-tickets'),
       $item->get_name(),
+      __('Event', 'koopo-tickets'),
+      $event_title ?: __('Event details available on the ticket link.', 'koopo-tickets'),
+      __('Date/Time', 'koopo-tickets'),
+      $schedule_label ?: __('See ticket link', 'koopo-tickets'),
       __('Order', 'koopo-tickets'),
-      $item->get_order_id()
+      $item->get_order_id(),
+      __('Accept Ticket', 'koopo-tickets'),
+      $accept_url
     );
-    wp_mail($email, $subject, $body);
+    if (!wp_mail($email, $subject, $body)) {
+      return new \WP_REST_Response(['error' => 'Unable to send ticket email'], 500);
+    }
 
-    return new \WP_REST_Response(['success' => true], 200);
+    return new \WP_REST_Response([
+      'success' => true,
+      'transfer' => Customer_Ticket_Transfers::format_transfer($transfer),
+    ], 200);
+  }
+
+  public static function cancel_transfer(\WP_REST_Request $req) {
+    $item_id = absint($req['item_id']);
+    $item = self::get_order_item_for_user($item_id);
+    if (!$item) {
+      return new \WP_REST_Response(['error' => 'Ticket not found'], 404);
+    }
+
+    $ticket_id = absint($req->get_param('ticket_id'));
+    $guest_index = $req->get_param('guest_index');
+    $guest_index = $guest_index === null ? null : absint($guest_index);
+
+    $ticket = null;
+    if ($ticket_id) {
+      $ticket = self::get_ticket_by_id_for_item($ticket_id, $item->get_id());
+    } elseif ($guest_index !== null) {
+      $ticket = self::get_ticket_by_index($item->get_id(), $guest_index + 2);
+    }
+
+    if (!$ticket) {
+      return new \WP_REST_Response(['error' => 'Ticket record not found for this attendee'], 404);
+    }
+
+    $transfer = Customer_Ticket_Transfers::get_transfer_by_ticket_id((int) $ticket->id, ['pending']);
+    if (!$transfer) {
+      return new \WP_REST_Response(['error' => 'No pending transfer found'], 404);
+    }
+
+    $result = Customer_Ticket_Transfers::cancel_transfer($transfer, get_current_user_id());
+    if (is_wp_error($result)) {
+      return new \WP_REST_Response(['error' => $result->get_error_message()], 409);
+    }
+
+    return new \WP_REST_Response([
+      'success' => true,
+      'transfer' => Customer_Ticket_Transfers::format_transfer($result),
+    ], 200);
   }
 
   public static function list_friends(\WP_REST_Request $req) {
@@ -186,16 +334,16 @@ class Customer_Tickets_API {
     $out = [];
     foreach ($users as $user) {
       $out[] = [
-        'id' => $user->ID,
-        'name' => $user->display_name,
-        'email' => $user->user_email,
-        'avatar' => function_exists('bp_core_fetch_avatar') ? bp_core_fetch_avatar([
+        'id' => (int) $user->ID,
+        'name' => sanitize_text_field((string) $user->display_name),
+        'email' => sanitize_email((string) $user->user_email),
+        'avatar' => esc_url_raw(function_exists('bp_core_fetch_avatar') ? bp_core_fetch_avatar([
           'item_id' => $user->ID,
           'type' => 'thumb',
           'width' => 48,
           'height' => 48,
           'html' => false,
-        ]) : get_avatar_url($user->ID, ['size' => 48]),
+        ]) : get_avatar_url($user->ID, ['size' => 48])),
       ];
     }
 
@@ -214,18 +362,24 @@ class Customer_Tickets_API {
     return $item;
   }
 
-  private static function get_paginated_ticket_item_ids(int $user_id, int $page, int $per_page): array {
+  private static function get_paginated_ticket_entries(int $user_id, int $page, int $per_page): array {
     global $wpdb;
 
     $order_items_table = $wpdb->prefix . 'woocommerce_order_items';
     $order_itemmeta_table = $wpdb->prefix . 'woocommerce_order_itemmeta';
+    $tickets_table = $wpdb->prefix . 'koopo_tickets';
+    $transfers_table = $wpdb->prefix . 'koopo_ticket_transfers';
     $offset = ($page - 1) * $per_page;
     $use_hpos = class_exists('\Automattic\WooCommerce\Utilities\OrderUtil')
       && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
 
     if ($use_hpos) {
       $orders_table = $wpdb->prefix . 'wc_orders';
-      $base_sql = "
+      $owner_sql = "
+        SELECT 'owner_item' AS entry_type,
+          order_items.order_item_id AS entry_id,
+          orders.date_created_gmt AS sort_date,
+          orders.id AS order_id
         FROM {$orders_table} orders
         INNER JOIN {$order_items_table} order_items
           ON order_items.order_id = orders.id
@@ -236,9 +390,46 @@ class Customer_Tickets_API {
         WHERE orders.type = 'shop_order'
           AND orders.status IN ('wc-processing', 'wc-completed', 'wc-on-hold')
           AND orders.customer_id = %d
+          AND (
+            NOT EXISTS (
+              SELECT 1
+              FROM {$tickets_table} owner_tickets
+              WHERE owner_tickets.order_item_id = order_items.order_item_id
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM {$tickets_table} owner_tickets
+              LEFT JOIN {$transfers_table} accepted_transfers
+                ON accepted_transfers.ticket_id = owner_tickets.id
+               AND accepted_transfers.status = 'accepted'
+              WHERE owner_tickets.order_item_id = order_items.order_item_id
+                AND accepted_transfers.id IS NULL
+            )
+          )
+        GROUP BY order_items.order_item_id, orders.date_created_gmt, orders.id
       ";
+
+      $received_sql = "
+        SELECT 'received_ticket' AS entry_type,
+          t.id AS entry_id,
+          COALESCE(t.updated_at, t.created_at) AS sort_date,
+          t.order_id AS order_id
+        FROM {$tickets_table} t
+        INNER JOIN {$orders_table} orders
+          ON orders.id = t.order_id
+        WHERE orders.type = 'shop_order'
+          AND orders.status IN ('wc-processing', 'wc-completed', 'wc-on-hold')
+          AND orders.customer_id <> %d
+          AND t.attendee_user_id = %d
+          AND t.status IN ('transferred', 'redeemed')
+      ";
+      $union_args = [$user_id, $user_id, $user_id];
     } else {
-      $base_sql = "
+      $owner_sql = "
+        SELECT 'owner_item' AS entry_type,
+          order_items.order_item_id AS entry_id,
+          orders.post_date_gmt AS sort_date,
+          orders.ID AS order_id
         FROM {$wpdb->posts} orders
         INNER JOIN {$wpdb->postmeta} customer_meta
           ON customer_meta.post_id = orders.ID
@@ -252,40 +443,70 @@ class Customer_Tickets_API {
           AND ticket_meta.meta_key IN ('_koopo_ticket_type_id', '_koopo_ticket_event_id')
         WHERE orders.post_type = 'shop_order'
           AND orders.post_status IN ('wc-processing', 'wc-completed', 'wc-on-hold')
+          AND (
+            NOT EXISTS (
+              SELECT 1
+              FROM {$tickets_table} owner_tickets
+              WHERE owner_tickets.order_item_id = order_items.order_item_id
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM {$tickets_table} owner_tickets
+              LEFT JOIN {$transfers_table} accepted_transfers
+                ON accepted_transfers.ticket_id = owner_tickets.id
+               AND accepted_transfers.status = 'accepted'
+              WHERE owner_tickets.order_item_id = order_items.order_item_id
+                AND accepted_transfers.id IS NULL
+            )
+          )
+        GROUP BY order_items.order_item_id, orders.post_date_gmt, orders.ID
       ";
+
+      $received_sql = "
+        SELECT 'received_ticket' AS entry_type,
+          t.id AS entry_id,
+          COALESCE(t.updated_at, t.created_at) AS sort_date,
+          t.order_id AS order_id
+        FROM {$tickets_table} t
+        INNER JOIN {$wpdb->posts} orders
+          ON orders.ID = t.order_id
+        INNER JOIN {$wpdb->postmeta} customer_meta
+          ON customer_meta.post_id = orders.ID
+          AND customer_meta.meta_key = '_customer_user'
+        WHERE orders.post_type = 'shop_order'
+          AND orders.post_status IN ('wc-processing', 'wc-completed', 'wc-on-hold')
+          AND customer_meta.meta_value <> %d
+          AND t.attendee_user_id = %d
+          AND t.status IN ('transferred', 'redeemed')
+      ";
+      $union_args = [$user_id, $user_id, $user_id];
     }
 
-    $total_sql = "SELECT COUNT(DISTINCT order_items.order_item_id) " . $base_sql;
-    $total = (int) $wpdb->get_var($wpdb->prepare($total_sql, $user_id));
+    $entries_sql = "{$owner_sql} UNION ALL {$received_sql}";
+    $total_sql = "SELECT COUNT(1) FROM ({$entries_sql}) entries";
+    $total = (int) $wpdb->get_var($wpdb->prepare($total_sql, $union_args));
 
     $items_sql = "
-      SELECT DISTINCT order_items.order_item_id
-      " . $base_sql . "
-      ORDER BY " . ($use_hpos ? 'orders.date_created_gmt DESC, orders.id' : 'orders.post_date_gmt DESC, orders.ID') . " DESC, order_items.order_item_id DESC
+      SELECT entry_type, entry_id, sort_date, order_id
+      FROM ({$entries_sql}) entries
+      ORDER BY sort_date DESC, order_id DESC, entry_id DESC
       LIMIT %d OFFSET %d
     ";
 
-    $item_ids = $wpdb->get_col($wpdb->prepare($items_sql, $user_id, $per_page, $offset));
-    $item_ids = array_map('absint', is_array($item_ids) ? $item_ids : []);
+    $items = $wpdb->get_results($wpdb->prepare($items_sql, array_merge($union_args, [$per_page, $offset])), ARRAY_A);
 
     return [
-      'item_ids' => $item_ids,
+      'entries' => is_array($items) ? $items : [],
       'total' => $total,
       'total_pages' => $total > 0 ? (int) ceil($total / $per_page) : 0,
     ];
   }
 
-  private static function format_ticket_item(\WC_Order $order, \WC_Order_Item_Product $item): array {
+  private static function format_ticket_item(\WC_Order $order, \WC_Order_Item_Product $item): ?array {
     $item_id = (int) $item->get_id();
     $event_id = (int) $item->get_meta('_koopo_ticket_event_id');
     $schedule_label = (string) $item->get_meta('_koopo_ticket_schedule_label');
     $schedule_id = (int) $item->get_meta('_koopo_ticket_schedule_id');
-
-    $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
-    $guests = $guests_raw ? json_decode($guests_raw, true) : [];
-    if (!is_array($guests)) {
-      $guests = [];
-    }
 
     $schedule = $schedule_id && class_exists('GeoDir_Event_Schedules')
       ? \GeoDir_Event_Schedules::get_schedule($schedule_id)
@@ -332,12 +553,28 @@ class Customer_Tickets_API {
     $quantity = (int) $item->get_quantity();
     $rows = self::get_ticket_rows($item_id);
     if (!empty($rows)) {
-      $slots = self::build_attendee_slots_from_rows($rows, $item);
-      $ticket_status = self::derive_ticket_status($rows);
+      $transfer_map = Customer_Ticket_Transfers::get_transfers_by_ticket_ids(array_map(function ($row) {
+        return (int) ($row->id ?? 0);
+      }, $rows), ['pending', 'accepted']);
+      $visible_rows = self::filter_owner_visible_ticket_rows($rows, $transfer_map);
+      if (empty($visible_rows)) {
+        return null;
+      }
+      $slots = self::build_attendee_slots_from_rows($visible_rows, $item, $transfer_map);
+      $ticket_status = self::derive_ticket_status($visible_rows);
+      $guests = self::build_guest_list_from_rows($visible_rows);
+      $quantity = count($visible_rows);
     } else {
+      $guests_raw = (string) $item->get_meta('_koopo_ticket_guests');
+      $guests = $guests_raw ? json_decode($guests_raw, true) : [];
+      if (!is_array($guests)) {
+        $guests = [];
+      }
       $slots = self::build_attendee_slots($item, $quantity);
       $ticket_status = self::map_ticket_status($order->get_status());
     }
+
+    $links = Customer_Tickets_Print::build_order_item_links($item_id);
 
     return [
       'order_id' => $order->get_id(),
@@ -346,9 +583,9 @@ class Customer_Tickets_API {
       'ticket_name' => $item->get_name(),
       'quantity' => $quantity,
       'event_id' => $event_id,
-      'event_title' => $event_id ? get_the_title($event_id) : '',
-      'event_url' => $event_id ? get_permalink($event_id) : '',
-      'event_image' => $event_id ? get_the_post_thumbnail_url($event_id, 'medium') : '',
+      'event_title' => $event_id ? wp_strip_all_tags((string) get_the_title($event_id)) : '',
+      'event_url' => $event_id ? esc_url_raw((string) get_permalink($event_id)) : '',
+      'event_image' => $event_id ? esc_url_raw((string) get_the_post_thumbnail_url($event_id, 'medium')) : '',
       'event_location' => $event_id ? WC_Cart::get_event_location($event_id) : '',
       'schedule_label' => $schedule_label,
       'schedule_date' => $schedule_date,
@@ -360,6 +597,88 @@ class Customer_Tickets_API {
       'attendees' => $slots,
       'status' => $ticket_status,
       'status_label' => ucfirst($ticket_status),
+      'view_url' => $links['view'],
+      'print_url' => $links['print'],
+      'download_url' => $links['download'],
+      'ownership' => 'order_owner',
+      'can_manage_guests' => true,
+    ];
+  }
+
+  private static function format_received_ticket(object $ticket, int $user_id): ?array {
+    if ((int) ($ticket->attendee_user_id ?? 0) !== $user_id) {
+      return null;
+    }
+
+    $item = new \WC_Order_Item_Product((int) ($ticket->order_item_id ?? 0));
+    if (!$item || !$item->get_id()) {
+      return null;
+    }
+
+    $order = wc_get_order((int) ($ticket->order_id ?? 0));
+    if (!$order) {
+      return null;
+    }
+
+    $event_id = (int) ($ticket->event_id ?? 0);
+    $schedule_label = (string) ($ticket->schedule_label ?? '');
+    $schedule_date = '';
+    $schedule_time = '';
+    if (!empty($ticket->schedule_id) && $event_id) {
+      $option = WC_Cart::get_event_date_option($event_id, (int) $ticket->schedule_id);
+      $schedule_date = $option['date'] ?? '';
+      $schedule_time = $option['time'] ?? '';
+      if (!$schedule_label && !empty($option['label'])) {
+        $schedule_label = $option['label'];
+      }
+    }
+    if (!$schedule_date && !$schedule_time && $event_id) {
+      $event_dt = WC_Cart::get_event_datetime($event_id);
+      $schedule_date = $event_dt['date'] ?? '';
+      $schedule_time = $event_dt['time'] ?? '';
+      if (!$schedule_label && !empty($event_dt['label'])) {
+        $schedule_label = $event_dt['label'];
+      }
+    }
+
+    $links = Customer_Tickets_Print::build_ticket_access_links($ticket);
+    $slot = self::build_attendee_from_row($ticket, [
+      'name' => (string) ($ticket->attendee_name ?? ''),
+      'email' => (string) ($ticket->attendee_email ?? ''),
+      'phone' => (string) ($ticket->attendee_phone ?? ''),
+    ]);
+
+    $status = (string) ($ticket->status ?? 'transferred');
+    $status_label = $status === 'transferred'
+      ? __('Transferred', 'koopo-tickets')
+      : ucfirst($status);
+
+    return [
+      'order_id' => (int) $order->get_id(),
+      'order_number' => (string) $order->get_order_number(),
+      'item_id' => (int) $item->get_id(),
+      'ticket_name' => (string) $item->get_name(),
+      'quantity' => 1,
+      'event_id' => $event_id,
+      'event_title' => $event_id ? wp_strip_all_tags((string) get_the_title($event_id)) : '',
+      'event_url' => $event_id ? esc_url_raw((string) get_permalink($event_id)) : '',
+      'event_image' => $event_id ? esc_url_raw((string) get_the_post_thumbnail_url($event_id, 'medium')) : '',
+      'event_location' => $event_id ? WC_Cart::get_event_location($event_id) : '',
+      'schedule_label' => $schedule_label,
+      'schedule_date' => $schedule_date,
+      'schedule_time' => $schedule_time,
+      'contact_name' => (string) ($ticket->attendee_name ?? ''),
+      'contact_email' => (string) ($ticket->attendee_email ?? ''),
+      'contact_phone' => (string) ($ticket->attendee_phone ?? ''),
+      'guests' => [],
+      'attendees' => [$slot],
+      'status' => $status,
+      'status_label' => $status_label,
+      'view_url' => $links['view'],
+      'print_url' => $links['print'],
+      'download_url' => $links['download'],
+      'ownership' => 'recipient',
+      'can_manage_guests' => false,
     ];
   }
 
@@ -379,13 +698,15 @@ class Customer_Tickets_API {
 
     for ($i = 0; $i < max(0, $quantity - 1); $i++) {
       $guest = $guests[$i] ?? [];
+      $guest['guest_slot_index'] = $i;
+      $guest['attendee_index'] = $i + 2;
       $slots[] = self::build_attendee($guest, sprintf(__('Guest %d', 'koopo-tickets'), $i + 1));
     }
 
     return $slots;
   }
 
-  private static function build_attendee_slots_from_rows(array $rows, \WC_Order_Item_Product $item): array {
+  private static function build_attendee_slots_from_rows(array $rows, \WC_Order_Item_Product $item, array $transfer_map = []): array {
     $contact = [
       'name' => (string) $item->get_meta('_koopo_ticket_contact_name'),
       'email' => (string) $item->get_meta('_koopo_ticket_contact_email'),
@@ -394,13 +715,49 @@ class Customer_Tickets_API {
 
     $slots = [];
     foreach ($rows as $row) {
-      $slots[] = self::build_attendee_from_row($row, $contact);
+      $slots[] = self::build_attendee_from_row($row, $contact, $transfer_map[(int) ($row->id ?? 0)] ?? null);
     }
 
     return $slots;
   }
 
-  private static function build_attendee_from_row(object $row, array $contact): array {
+  private static function filter_owner_visible_ticket_rows(array $rows, array $transfer_map): array {
+    $visible = [];
+
+    foreach ($rows as $row) {
+      $ticket_id = (int) ($row->id ?? 0);
+      $transfer = $transfer_map[$ticket_id] ?? null;
+      if ($transfer && (string) ($transfer->status ?? '') === 'accepted') {
+        continue;
+      }
+
+      $visible[] = $row;
+    }
+
+    return $visible;
+  }
+
+  private static function build_guest_list_from_rows(array $rows): array {
+    $guests = [];
+
+    foreach ($rows as $row) {
+      if ((int) ($row->attendee_index ?? 0) <= 1) {
+        continue;
+      }
+
+      $guests[] = [
+        'slot_index' => max(0, (int) ($row->attendee_index ?? 0) - 2),
+        'user_id' => (int) ($row->attendee_user_id ?? 0),
+        'name' => sanitize_text_field((string) ($row->attendee_name ?? '')),
+        'email' => sanitize_email((string) ($row->attendee_email ?? '')),
+        'phone' => sanitize_text_field((string) ($row->attendee_phone ?? '')),
+      ];
+    }
+
+    return $guests;
+  }
+
+  private static function build_attendee_from_row(object $row, array $contact, ?object $transfer = null): array {
     $name = sanitize_text_field($row->attendee_name ?? '');
     $email = sanitize_email($row->attendee_email ?? '');
     $phone = sanitize_text_field($row->attendee_phone ?? '');
@@ -416,34 +773,40 @@ class Customer_Tickets_API {
     }
 
     $avatar = '';
-    $user_id = 0;
-    if ($email) {
+    $user_id = (int) ($row->attendee_user_id ?? 0);
+    $user = $user_id ? get_user_by('id', $user_id) : false;
+    if (!$user && $email) {
       $user = get_user_by('email', $email);
       if ($user) {
         $user_id = (int) $user->ID;
       }
+    }
+    if ($email || $user) {
       if ($user && function_exists('bp_core_fetch_avatar')) {
-        $avatar = bp_core_fetch_avatar([
+        $avatar = esc_url_raw(bp_core_fetch_avatar([
           'item_id' => $user->ID,
           'type' => 'thumb',
           'width' => 64,
           'height' => 64,
           'html' => false,
-        ]);
+        ]));
       } else {
-        $avatar = get_avatar_url($email, ['size' => 64]);
+        $avatar = esc_url_raw(get_avatar_url($email, ['size' => 64]));
       }
     }
 
     return [
       'ticket_id' => (int) $row->id,
       'ticket_status' => (string) $row->status,
+      'attendee_index' => (int) $row->attendee_index,
+      'guest_slot_index' => (int) $row->attendee_index > 1 ? ((int) $row->attendee_index - 2) : -1,
       'label' => $label,
       'name' => $name,
       'email' => $email,
       'phone' => $phone,
       'avatar' => $avatar,
       'user_id' => $user_id,
+      'transfer' => Customer_Ticket_Transfers::format_transfer($transfer),
     ];
   }
 
@@ -454,31 +817,40 @@ class Customer_Tickets_API {
     $label = $name ?: $fallback_label;
 
     $avatar = '';
-    $user = null;
-    if ($email) {
+    $user_id = absint($data['user_id'] ?? 0);
+    $user = $user_id ? get_user_by('id', $user_id) : null;
+    if (!$user && $email) {
       $user = get_user_by('email', $email);
+      if ($user) {
+        $user_id = (int) $user->ID;
+      }
+    }
+    if ($email || $user) {
       if ($user && function_exists('bp_core_fetch_avatar')) {
-        $avatar = bp_core_fetch_avatar([
+        $avatar = esc_url_raw(bp_core_fetch_avatar([
           'item_id' => $user->ID,
           'type' => 'thumb',
           'width' => 64,
           'height' => 64,
           'html' => false,
-        ]);
+        ]));
       } else {
-        $avatar = get_avatar_url($email, ['size' => 64]);
+        $avatar = esc_url_raw(get_avatar_url($email, ['size' => 64]));
       }
     }
 
     return [
       'ticket_id' => 0,
       'ticket_status' => 'issued',
+      'attendee_index' => absint($data['attendee_index'] ?? 0),
+      'guest_slot_index' => array_key_exists('guest_slot_index', $data) ? absint($data['guest_slot_index']) : -1,
       'label' => $label,
       'name' => $name,
       'email' => $email,
       'phone' => $phone,
       'avatar' => $avatar,
-      'user_id' => $user ? (int) $user->ID : 0,
+      'user_id' => $user_id,
+      'transfer' => null,
     ];
   }
 
@@ -503,6 +875,14 @@ class Customer_Tickets_API {
     $table = $wpdb->prefix . 'koopo_tickets';
     return $wpdb->get_results(
       $wpdb->prepare("SELECT * FROM {$table} WHERE order_item_id = %d ORDER BY attendee_index ASC", $item_id)
+    );
+  }
+
+  private static function get_ticket_by_id(int $ticket_id) {
+    global $wpdb;
+    $table = $wpdb->prefix . 'koopo_tickets';
+    return $wpdb->get_row(
+      $wpdb->prepare("SELECT * FROM {$table} WHERE id = %d LIMIT 1", $ticket_id)
     );
   }
 
@@ -537,6 +917,17 @@ class Customer_Tickets_API {
 
     foreach ($guests as $index => $guest) {
       $attendee_index = $index + 2;
+      $row = self::get_ticket_by_index((int) $item->get_id(), $attendee_index);
+      if (!$row) {
+        continue;
+      }
+      if ((string) ($row->status ?? '') === 'transferred') {
+        continue;
+      }
+      $locked_transfer = Customer_Ticket_Transfers::get_transfer_by_ticket_id((int) ($row->id ?? 0), ['pending', 'accepted']);
+      if ($locked_transfer) {
+        continue;
+      }
       $name = sanitize_text_field($guest['name'] ?? '');
       $email = sanitize_email($guest['email'] ?? '');
       $phone = sanitize_text_field($guest['phone'] ?? '');
@@ -544,11 +935,11 @@ class Customer_Tickets_API {
         'attendee_name' => $name,
         'attendee_email' => $email,
         'attendee_phone' => $phone,
+        'attendee_user_id' => absint($guest['user_id'] ?? 0),
         'updated_at' => gmdate('Y-m-d H:i:s'),
       ], [
-        'order_item_id' => $item->get_id(),
-        'attendee_index' => $attendee_index,
-      ], ['%s', '%s', '%s', '%s'], ['%d', '%d']);
+        'id' => (int) $row->id,
+      ], ['%s', '%s', '%s', '%d', '%s'], ['%d']);
     }
   }
 
@@ -564,9 +955,10 @@ class Customer_Tickets_API {
       'attendee_name' => $data['name'] ?? '',
       'attendee_email' => $data['email'] ?? '',
       'attendee_phone' => $data['phone'] ?? '',
+      'attendee_user_id' => absint($data['user_id'] ?? 0),
       'status' => $status,
       'updated_at' => gmdate('Y-m-d H:i:s'),
-    ], ['id' => (int) $ticket->id], ['%s', '%s', '%s', '%s', '%s'], ['%d']);
+    ], ['id' => (int) $ticket->id], ['%s', '%s', '%s', '%d', '%s', '%s'], ['%d']);
 
     $item = new \WC_Order_Item_Product($ticket->order_item_id);
     if ($item && $item->get_id() && (int) $ticket->attendee_index > 1) {

@@ -70,9 +70,8 @@ class Ticket_Cards {
 
       $ticket_type_id = (int) get_post_meta($variation_id, WC_Ticket_Product::META_TICKET_TYPE_ID, true);
       if ($ticket_type_id) {
-        $status = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_STATUS, true);
-        $visibility = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_VISIBILITY, true);
-        if ($status === 'inactive' || $visibility === 'private') continue;
+        $availability = WC_Cart::get_ticket_type_availability($ticket_type_id);
+        if (empty($availability['available'])) continue;
       }
 
       $attributes = $variation->get_attributes();
@@ -284,6 +283,11 @@ class Ticket_Cards {
 
     $event_dates = WC_Cart::get_event_date_options($event_id);
     if (!empty($event_dates)) {
+      $now = (int) current_time('timestamp');
+      $event_dates = array_values(array_filter($event_dates, function ($entry) use ($now) {
+        $cutoff = (int) ($entry['end_ts'] ?? ($entry['start_ts'] ?? 0));
+        return !$cutoff || $now <= $cutoff;
+      }));
       return $event_dates;
     }
 

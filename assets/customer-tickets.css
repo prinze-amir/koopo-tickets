@@ -261,6 +261,70 @@
 }
 
 .koopo-ticket-notice.is-error {
+  background: #fff1f0;
+  border: 1px solid #f1b7b4;
+  color: #8a2721;
+}
+
+.koopo-ticket-transfer-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #eaf1ff;
+  color: #1f4e96;
+}
+
+.koopo-ticket-transfer-badge.is-pending {
+  background: #fff4dd;
+  color: #9a5b00;
+}
+
+.koopo-ticket-transfer-badge.is-accepted,
+.koopo-ticket-transfer-badge.is-owned {
+  background: #e8f6ee;
+  color: #1f6a3c;
+}
+
+.koopo-ticket-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.koopo-ticket-pagination__pages {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.koopo-ticket-pagination__label {
+  color: #666;
+  font-size: 14px;
+}
+
+.koopo-ticket-page.is-current {
+  background: #111;
+  color: #fff;
+}
+
+@media (max-width: 767px) {
+  .koopo-ticket-pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .koopo-ticket-pagination__pages {
+    justify-content: center;
+  }
+}
+
+.koopo-ticket-notice.is-error {
   background: #fff3f3;
   border: 1px solid #e5b2b2;
   color: #7a1e1e;

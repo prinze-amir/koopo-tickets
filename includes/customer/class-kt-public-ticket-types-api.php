@@ -44,12 +44,11 @@ class Public_Ticket_Types_API {
     $query_args = [
       'post_type' => Ticket_Types_CPT::POST_TYPE,
       'post_status' => 'publish',
-      'posts_per_page' => $per_page,
-      'paged' => $page,
+      'posts_per_page' => -1,
       'orderby' => 'title',
       'order' => 'ASC',
       'fields' => 'ids',
-      'no_found_rows' => false,
+      'no_found_rows' => true,
     ];
 
     if ($event_id > 0) {
@@ -64,13 +63,17 @@ class Public_Ticket_Types_API {
 
     $q = new \WP_Query($query_args);
 
-    $items = [];
+    $filtered = [];
     foreach ($q->posts as $ticket_type_id) {
       $item = self::format_public_ticket_type((int) $ticket_type_id);
       if (is_array($item)) {
-        $items[] = $item;
+        $filtered[] = $item;
       }
     }
+
+    $total = count($filtered);
+    $offset = ($page - 1) * $per_page;
+    $items = array_slice($filtered, $offset, $per_page);
 
     return new \WP_REST_Response([
       'items' => $items,
@@ -78,32 +81,20 @@ class Public_Ticket_Types_API {
       'event_id' => $event_id > 0 ? $event_id : null,
       'page' => $page,
       'per_page' => $per_page,
-      'total' => (int) $q->found_posts,
-      'total_pages' => (int) $q->max_num_pages,
+      'total' => $total,
+      'total_pages' => $total > 0 ? (int) ceil($total / $per_page) : 0,
     ], 200);
   }
 
   private static function format_public_ticket_type(int $ticket_type_id): ?array {
-    $status = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_STATUS, true);
-    if ($status && 'active' !== $status) {
-      return null;
-    }
-
-    $visibility = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_VISIBILITY, true);
-    if ($visibility && 'public' !== $visibility) {
-      return null;
-    }
-
     $event_id = (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_EVENT_ID, true);
-    if ($event_id <= 0) {
+    $availability = WC_Cart::get_ticket_type_availability($ticket_type_id, $event_id, 0);
+    if (empty($availability['available'])) {
       return null;
     }
 
-    $event = get_post($event_id);
-    if (!$event || 'publish' !== $event->post_status) {
-      return null;
-    }
-
+    $status = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_STATUS, true);
+    $visibility = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_VISIBILITY, true);
     $price = (float) get_post_meta($ticket_type_id, Ticket_Types_API::META_PRICE, true);
     $capacity = (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_CAPACITY, true);
     $max_per_order = (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_MAX_PER_ORDER, true);
@@ -150,12 +141,39 @@ class Public_Ticket_Types_API {
       return 0;
     }
 
-    $sql = $wpdb->prepare(
-      "SELECT COUNT(1) FROM {$table} WHERE ticket_type_id = %d AND status IN (%s, %s)",
-      $ticket_type_id,
-      'issued',
-      'redeemed'
-    );
+    $use_hpos = class_exists('\Automattic\WooCommerce\Utilities\OrderUtil')
+      && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+
+    if ($use_hpos) {
+      $orders_table = $wpdb->prefix . 'wc_orders';
+      $sql = $wpdb->prepare(
+        "SELECT COUNT(1)
+         FROM {$table} t
+         INNER JOIN {$orders_table} orders
+           ON orders.id = t.order_id
+         WHERE t.ticket_type_id = %d
+           AND t.status NOT IN (%s, %s)
+           AND orders.type = 'shop_order'
+           AND orders.status IN ('wc-processing', 'wc-completed', 'wc-on-hold')",
+        $ticket_type_id,
+        'refunded',
+        'cancelled'
+      );
+    } else {
+      $sql = $wpdb->prepare(
+        "SELECT COUNT(1)
+         FROM {$table} t
+         INNER JOIN {$wpdb->posts} orders
+           ON orders.ID = t.order_id
+         WHERE t.ticket_type_id = %d
+           AND t.status NOT IN (%s, %s)
+           AND orders.post_type = 'shop_order'
+           AND orders.post_status IN ('wc-processing', 'wc-completed', 'wc-on-hold')",
+        $ticket_type_id,
+        'refunded',
+        'cancelled'
+      );
+    }
 
     return (int) $wpdb->get_var($sql);
   }

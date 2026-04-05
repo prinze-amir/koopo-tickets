@@ -36,6 +36,28 @@ class WC_Cart {
     }
 
     $ticket_type_id = absint($_REQUEST['koopo_ticket_type_id'] ?? 0);
+    $variation_id = absint($_REQUEST['variation_id'] ?? 0);
+    if (!$ticket_type_id && $variation_id) {
+      $ticket_type_id = (int) get_post_meta($variation_id, WC_Ticket_Product::META_TICKET_TYPE_ID, true);
+    }
+    if (!$ticket_type_id) {
+      $ticket_type_id = (int) get_post_meta($product_id, WC_Ticket_Product::META_TICKET_TYPE_ID, true);
+    }
+
+    $event_id = absint($_REQUEST['koopo_ticket_event_id'] ?? 0);
+    if (!$event_id && $ticket_type_id) {
+      $event_id = (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_EVENT_ID, true);
+    }
+
+    $schedule_id = absint($_REQUEST['koopo_ticket_schedule_id'] ?? 0);
+    if ($ticket_type_id) {
+      $availability = self::get_ticket_type_availability($ticket_type_id, $event_id, $schedule_id);
+      if (empty($availability['available'])) {
+        wc_add_notice($availability['message'] ?: __('This ticket is not available.', 'koopo-tickets'), 'error');
+        return false;
+      }
+    }
+
     $max_per_order = $ticket_type_id ? (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_MAX_PER_ORDER, true) : 0;
     if ($max_per_order && $quantity > $max_per_order) {
       wc_add_notice(__('Selected quantity exceeds the ticket limit.', 'koopo-tickets'), 'error');
@@ -51,6 +73,154 @@ class WC_Cart {
     }
 
     return $passed;
+  }
+
+  public static function get_ticket_type_availability(int $ticket_type_id, int $event_id = 0, int $schedule_id = 0): array {
+    $ticket_type_id = absint($ticket_type_id);
+    if ($ticket_type_id < 1) {
+      return [
+        'available' => false,
+        'reason' => 'missing_ticket_type',
+        'message' => __('This ticket is not available.', 'koopo-tickets'),
+      ];
+    }
+
+    $ticket = get_post($ticket_type_id);
+    if (!$ticket || $ticket->post_type !== Ticket_Types_CPT::POST_TYPE || $ticket->post_status !== 'publish') {
+      return [
+        'available' => false,
+        'reason' => 'missing_ticket_type',
+        'message' => __('This ticket is not available.', 'koopo-tickets'),
+      ];
+    }
+
+    if (!$event_id) {
+      $event_id = (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_EVENT_ID, true);
+    }
+
+    if ($event_id < 1) {
+      return [
+        'available' => false,
+        'reason' => 'missing_event',
+        'message' => __('This ticket is not linked to a valid event.', 'koopo-tickets'),
+      ];
+    }
+
+    $event = get_post($event_id);
+    if (!$event || $event->post_status !== 'publish') {
+      return [
+        'available' => false,
+        'reason' => 'missing_event',
+        'message' => __('This event is no longer available.', 'koopo-tickets'),
+      ];
+    }
+
+    $status = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_STATUS, true);
+    if ($status === 'inactive') {
+      return [
+        'available' => false,
+        'reason' => 'inactive',
+        'message' => __('This ticket is not currently available.', 'koopo-tickets'),
+      ];
+    }
+
+    $visibility = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_VISIBILITY, true);
+    if ($visibility === 'private') {
+      return [
+        'available' => false,
+        'reason' => 'private',
+        'message' => __('This ticket is not currently available.', 'koopo-tickets'),
+      ];
+    }
+
+    return self::get_ticket_type_sales_state($ticket_type_id, $event_id, $schedule_id);
+  }
+
+  public static function get_ticket_type_sales_state(int $ticket_type_id, int $event_id = 0, int $schedule_id = 0): array {
+    $mode = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_SALES_MODE, true);
+    if (!in_array($mode, ['event_start', 'event_end', 'custom'], true)) {
+      $mode = 'event_start';
+    }
+
+    $sales_start = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_SALES_START, true);
+    $sales_end = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_SALES_END, true);
+    $now = (int) current_time('timestamp');
+
+    if ($mode === 'custom') {
+      $start_ts = self::parse_datetime_value($sales_start);
+      $end_ts = self::parse_datetime_value($sales_end);
+
+      if ($start_ts && $now < $start_ts) {
+        return [
+          'available' => false,
+          'reason' => 'sales_not_started',
+          'message' => __('Ticket sales have not started yet.', 'koopo-tickets'),
+        ];
+      }
+
+      if ($end_ts && $now > $end_ts) {
+        return [
+          'available' => false,
+          'reason' => 'sales_ended',
+          'message' => __('Ticket sales have ended for this ticket.', 'koopo-tickets'),
+        ];
+      }
+
+      return [
+        'available' => true,
+        'reason' => '',
+        'message' => '',
+      ];
+    }
+
+    if (!$event_id) {
+      $event_id = (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_EVENT_ID, true);
+    }
+
+    $references = [];
+    if ($schedule_id > 0) {
+      $selected = self::get_event_date_option($event_id, $schedule_id);
+      if (!$selected) {
+        return [
+          'available' => false,
+          'reason' => 'invalid_schedule',
+          'message' => __('Selected event date is unavailable.', 'koopo-tickets'),
+        ];
+      }
+      $references[] = $selected;
+    } else {
+      $references = self::get_event_date_options($event_id);
+    }
+
+    if (empty($references)) {
+      return [
+        'available' => true,
+        'reason' => '',
+        'message' => '',
+      ];
+    }
+
+    foreach ($references as $reference) {
+      $cutoff = $mode === 'event_end'
+        ? (int) ($reference['end_ts'] ?? 0)
+        : (int) ($reference['start_ts'] ?? 0);
+      if (!$cutoff && $mode === 'event_end') {
+        $cutoff = (int) ($reference['start_ts'] ?? 0);
+      }
+      if ($cutoff && $now <= $cutoff) {
+        return [
+          'available' => true,
+          'reason' => '',
+          'message' => '',
+        ];
+      }
+    }
+
+    return [
+      'available' => false,
+      'reason' => 'sales_ended',
+      'message' => __('Ticket sales have ended for this ticket.', 'koopo-tickets'),
+    ];
   }
 
   private static function is_ticket_product_request(int $product_id): bool {
@@ -259,7 +429,7 @@ class WC_Cart {
 
   public static function get_event_datetime(int $event_id): array {
     if (!$event_id) {
-      return ['date' => '', 'time' => '', 'label' => ''];
+      return ['date' => '', 'time' => '', 'label' => '', 'start_ts' => 0, 'end_ts' => 0];
     }
 
     $options = self::get_event_date_options($event_id);
@@ -268,10 +438,12 @@ class WC_Cart {
         'date' => $options[0]['date'] ?? '',
         'time' => $options[0]['time'] ?? '',
         'label' => $options[0]['label'] ?? '',
+        'start_ts' => (int) ($options[0]['start_ts'] ?? 0),
+        'end_ts' => (int) ($options[0]['end_ts'] ?? 0),
       ];
     }
 
-    return ['date' => '', 'time' => '', 'label' => ''];
+    return ['date' => '', 'time' => '', 'label' => '', 'start_ts' => 0, 'end_ts' => 0];
   }
 
   public static function get_event_date_options(int $event_id): array {
@@ -303,8 +475,8 @@ class WC_Cart {
         $start_time = $schedule->start_time ?? '00:00:00';
         $end_date = !empty($schedule->end_date) && $schedule->end_date !== '0000-00-00' ? $schedule->end_date : $schedule->start_date;
         $end_time = $schedule->end_time ?? '';
-        $start_ts = strtotime($schedule->start_date . ' ' . $start_time);
-        $end_ts = $end_time ? strtotime($end_date . ' ' . $end_time) : 0;
+        $start_ts = self::parse_datetime_value($schedule->start_date . ' ' . $start_time);
+        $end_ts = $end_time ? self::parse_datetime_value($end_date . ' ' . $end_time) : 0;
         if ($start_ts) {
           $labels = self::format_event_datetime_labels($start_ts, $end_ts, !empty($schedule->all_day));
           return [
@@ -313,6 +485,7 @@ class WC_Cart {
             'date' => $labels['date'],
             'time' => $labels['time'],
             'start_ts' => $start_ts,
+            'end_ts' => $end_ts,
           ];
         }
       }
@@ -398,9 +571,9 @@ class WC_Cart {
       $start_time = $schedule->start_time ?? '00:00:00';
       $end_date = !empty($schedule->end_date) && $schedule->end_date !== '0000-00-00' ? $schedule->end_date : $schedule->start_date;
       $end_time = $schedule->end_time ?? '';
-      $start_ts = strtotime($schedule->start_date . ' ' . $start_time);
+      $start_ts = self::parse_datetime_value($schedule->start_date . ' ' . $start_time);
       if (!$start_ts) continue;
-      $end_ts = $end_time ? strtotime($end_date . ' ' . $end_time) : 0;
+      $end_ts = $end_time ? self::parse_datetime_value($end_date . ' ' . $end_time) : 0;
       $labels = self::format_event_datetime_labels($start_ts, $end_ts, !empty($schedule->all_day));
       $out[] = [
         'schedule_id' => absint($schedule->schedule_id ?? 0),
@@ -408,6 +581,7 @@ class WC_Cart {
         'date' => $labels['date'],
         'time' => $labels['time'],
         'start_ts' => $start_ts,
+        'end_ts' => $end_ts,
       ];
     }
 
@@ -437,12 +611,12 @@ class WC_Cart {
 
     if (!$start_dt) return null;
 
-    $start_ts = is_numeric($start_dt) ? (int) $start_dt : strtotime($start_dt);
+    $start_ts = is_numeric($start_dt) ? (int) $start_dt : self::parse_datetime_value($start_dt);
     if (!$start_ts) return null;
 
     $end_ts = 0;
     if ($end_dt) {
-      $end_ts = is_numeric($end_dt) ? (int) $end_dt : strtotime($end_dt);
+      $end_ts = is_numeric($end_dt) ? (int) $end_dt : self::parse_datetime_value($end_dt);
     }
     if ($end_ts && $end_ts < $start_ts) {
       $end_ts = 0;
@@ -471,6 +645,7 @@ class WC_Cart {
       'date' => $labels['date'],
       'time' => $labels['time'],
       'start_ts' => $start_ts,
+      'end_ts' => $end_ts,
     ];
   }
 
@@ -507,6 +682,21 @@ class WC_Cart {
       'time' => $time_label,
       'label' => $label,
     ];
+  }
+
+  private static function parse_datetime_value(string $value): int {
+    $value = trim($value);
+    if ($value === '') {
+      return 0;
+    }
+
+    try {
+      $datetime = new \DateTimeImmutable($value, wp_timezone());
+      return $datetime->getTimestamp();
+    } catch (\Throwable $e) {
+      $fallback = strtotime($value);
+      return $fallback ? (int) $fallback : 0;
+    }
   }
 
   private static function safe_geodir_meta(int $event_id, string $key): string {

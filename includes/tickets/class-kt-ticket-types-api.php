@@ -231,6 +231,9 @@ class Ticket_Types_API {
     $user_id = get_current_user_id();
 
     $event_id = absint($req->get_param('event_id'));
+    $search = sanitize_text_field((string) $req->get_param('search'));
+    $status_filter = sanitize_text_field((string) $req->get_param('status'));
+    $visibility_filter = sanitize_text_field((string) $req->get_param('visibility'));
     $page = max(1, absint($req->get_param('page')));
     $per_page = absint($req->get_param('per_page'));
     if ($per_page < 1) {
@@ -254,14 +257,37 @@ class Ticket_Types_API {
       $query_args['author'] = $user_id;
     }
 
+    if ($search !== '') {
+      $query_args['s'] = $search;
+    }
+
+    $meta_query = [];
     if ($event_id) {
-      $query_args['meta_query'] = [
-        [
-          'key' => self::META_EVENT_ID,
-          'value' => $event_id,
-          'compare' => '=',
-        ],
+      $meta_query[] = [
+        'key' => self::META_EVENT_ID,
+        'value' => $event_id,
+        'compare' => '=',
       ];
+    }
+
+    if (in_array($status_filter, ['active', 'inactive'], true)) {
+      $meta_query[] = [
+        'key' => self::META_STATUS,
+        'value' => $status_filter,
+        'compare' => '=',
+      ];
+    }
+
+    if (in_array($visibility_filter, ['public', 'private'], true)) {
+      $meta_query[] = [
+        'key' => self::META_VISIBILITY,
+        'value' => $visibility_filter,
+        'compare' => '=',
+      ];
+    }
+
+    if (!empty($meta_query)) {
+      $query_args['meta_query'] = $meta_query;
     }
 
     $q = new \WP_Query($query_args);
