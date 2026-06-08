@@ -31,6 +31,7 @@ class WC_Ticket_Product {
     }
     if (!$parent_id) return 0;
 
+    self::ensure_product_author($parent_id, $event_id);
     self::ensure_parent_image($parent_id, $event_id);
     $variation_id = (int) get_post_meta($ticket_type_id, self::META_TICKET_VARIATION_ID, true);
     $variation = $variation_id ? new \WC_Product_Variation($variation_id) : null;
@@ -43,6 +44,7 @@ class WC_Ticket_Product {
     $unlimited = (bool) get_post_meta($ticket_type_id, Ticket_Types_API::META_UNLIMITED_CAPACITY, true);
     $status = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_STATUS, true);
     $sku = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_SKU, true);
+    $image_id = (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_IMAGE_ID, true);
 
     self::ensure_parent_attribute($parent_id, $ticket->post_title);
 
@@ -51,6 +53,11 @@ class WC_Ticket_Product {
     $variation->set_virtual(true);
     $variation->set_menu_order(0);
     $variation->set_attributes(self::build_variation_attributes($ticket->post_title));
+    if ($image_id) {
+      $variation->set_image_id($image_id);
+    } else {
+      $variation->set_image_id(0);
+    }
     if ($sku) $variation->set_sku($sku);
 
     if ($status === 'inactive') {
@@ -71,6 +78,7 @@ class WC_Ticket_Product {
     $new_variation_id = self::safe_save_product($variation);
 
     if ($new_variation_id) {
+      self::ensure_product_author($new_variation_id, $event_id);
       update_post_meta($new_variation_id, self::META_TICKET_TYPE_ID, $ticket_type_id);
       update_post_meta($ticket_type_id, self::META_TICKET_PRODUCT_ID, $parent_id);
       update_post_meta($ticket_type_id, self::META_TICKET_VARIATION_ID, $new_variation_id);
@@ -121,12 +129,9 @@ class WC_Ticket_Product {
     $parent->set_virtual(true);
     $parent->set_manage_stock(false);
 
-    if ($event->post_author) {
-      $parent->set_props(['post_author' => (int) $event->post_author]);
-    }
-
     $parent_id = self::safe_save_product($parent);
     if ($parent_id) {
+      self::ensure_product_author($parent_id, $event_id);
       $parent->set_id($parent_id);
       return $parent;
     }
@@ -173,6 +178,17 @@ class WC_Ticket_Product {
 
     $parent->set_image_id((int) $event_image_id);
     self::safe_save_product($parent);
+  }
+
+  private static function ensure_product_author(int $product_id, int $event_id): void {
+    $event = get_post($event_id);
+    if (!$event || !$event->post_author) return;
+    if ((int) get_post_field('post_author', $product_id) === (int) $event->post_author) return;
+
+    wp_update_post([
+      'ID' => $product_id,
+      'post_author' => (int) $event->post_author,
+    ]);
   }
 
   private static function build_variation_attributes(string $ticket_name): array {

@@ -10,9 +10,10 @@ class Admin_Settings {
   }
 
   public static function register_menu() {
-    add_options_page(
+    add_submenu_page(
+      Admin_Dashboard::PAGE_SLUG,
       'Koopo Tickets',
-      'Koopo Tickets',
+      'Settings',
       'manage_options',
       Settings::SETTINGS_PAGE,
       [__CLASS__, 'render_page']

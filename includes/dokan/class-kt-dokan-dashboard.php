@@ -55,6 +55,9 @@ class Dokan_Dashboard {
     $is_koopo = isset($wp_query->query_vars['koopo-tickets']);
     if (!$is_koopo) return;
 
+    if (function_exists('wp_enqueue_media')) {
+      wp_enqueue_media();
+    }
     wp_enqueue_style('koopo-tickets-vendor', KOOPO_TICKETS_URL . 'assets/vendor.css', [], KOOPO_TICKETS_VERSION);
     wp_enqueue_script('koopo-tickets-vendor', KOOPO_TICKETS_URL . 'assets/vendor-tickets.js', ['jquery'], KOOPO_TICKETS_VERSION, true);
     wp_enqueue_script('koopo-tickets-checkin', KOOPO_TICKETS_URL . 'assets/vendor-checkin.js', ['jquery'], KOOPO_TICKETS_VERSION, true);

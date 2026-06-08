@@ -15,8 +15,8 @@ class Ticket_Types_CPT {
     register_post_type(self::POST_TYPE, [
       'label' => 'Ticket Types',
       'public' => false,
-      'show_ui' => true,
-      'show_in_menu' => true,
+      'show_ui' => false,
+      'show_in_menu' => false,
       'show_in_rest' => false,
       'supports' => ['title', 'author'],
       'capability_type' => 'post',

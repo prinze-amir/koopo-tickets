@@ -52,8 +52,10 @@ final class Koopo_Tickets {
 
     require_once __DIR__ . '/includes/core/class-kt-db.php';
     require_once __DIR__ . '/includes/core/class-kt-access.php';
+    require_once __DIR__ . '/includes/core/class-kt-author-sync.php';
     require_once __DIR__ . '/includes/core/class-kt-logger.php';
     require_once __DIR__ . '/includes/settings/class-kt-settings.php';
+    require_once __DIR__ . '/includes/admin/class-kt-admin-dashboard.php';
     require_once __DIR__ . '/includes/admin/class-kt-admin-settings.php';
     require_once __DIR__ . '/includes/tickets/class-kt-ticket-types-cpt.php';
     require_once __DIR__ . '/includes/tickets/class-kt-ticket-types-api.php';
@@ -76,6 +78,8 @@ final class Koopo_Tickets {
 
     Koopo_Tickets\DB::maybe_upgrade();
     Koopo_Tickets\Settings::init();
+    Koopo_Tickets\Author_Sync::init();
+    Koopo_Tickets\Admin_Dashboard::init();
     Koopo_Tickets\Admin_Settings::init();
     Koopo_Tickets\Ticket_Types_CPT::init();
     Koopo_Tickets\Ticket_Types_API::init();

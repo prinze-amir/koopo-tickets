@@ -1,0 +1,24 @@
+#koopo-ticket-event-author-status.koopo-ticket-author-error {
+  color: #b32d2e;
+}
+
+.koopo-ticket-author-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.koopo-ticket-author-result__meta {
+  color: #646970;
+  font-size: 12px;
+}
+
+.koopo-ticket-author-result__error {
+  color: #b32d2e;
+  font-size: 12px;
+}
+
+.ui-menu-item.koopo-ticket-author-result-disabled .ui-menu-item-wrapper {
+  opacity: 0.65;
+}

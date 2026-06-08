@@ -21,6 +21,15 @@ class Vendor_Events_API {
       'callback' => [__CLASS__, 'get_ticket_analytics'],
       'permission_callback' => fn() => Access::vendor_can_manage_tickets(),
     ]);
+
+    register_rest_route('koopo/v1', '/vendor/events/(?P<id>\d+)/action', [
+      'methods' => 'POST',
+      'callback' => [__CLASS__, 'event_action'],
+      'permission_callback' => fn() => Access::vendor_can_manage_tickets(),
+      'args' => [
+        'action' => ['type' => 'string', 'required' => true],
+      ],
+    ]);
   }
 
   public static function get_my_events(\WP_REST_Request $req) {
@@ -75,6 +84,35 @@ class Vendor_Events_API {
       set_transient($cache_key, $stats, $cache_ttl);
     }
     return new \WP_REST_Response($stats, 200);
+  }
+
+  public static function event_action(\WP_REST_Request $req) {
+    $user_id = get_current_user_id();
+    if (!$user_id) {
+      return new \WP_REST_Response(['error' => 'Unauthorized'], 401);
+    }
+
+    $event_id = absint($req->get_param('id'));
+    [$ok, $event_or_response] = self::assert_event_access($event_id, $user_id);
+    if (!$ok) {
+      return $event_or_response;
+    }
+
+    $action = sanitize_key((string) $req->get_param('action'));
+    if (!in_array($action, ['publish', 'unpublish'], true)) {
+      return new \WP_REST_Response(['error' => 'action must be publish or unpublish'], 400);
+    }
+
+    $updated = wp_update_post([
+      'ID' => $event_id,
+      'post_status' => $action === 'publish' ? 'publish' : 'draft',
+    ], true);
+
+    if (is_wp_error($updated)) {
+      return new \WP_REST_Response(['error' => $updated->get_error_message()], 400);
+    }
+
+    return new \WP_REST_Response(self::format_event($event_id), 200);
   }
 
   public static function get_events_for_user(int $user_id): array {
@@ -357,7 +395,7 @@ class Vendor_Events_API {
 
     $q = new \WP_Query([
       'post_type' => $types,
-      'post_status' => 'publish',
+      'post_status' => ['publish', 'draft', 'pending', 'private'],
       'author' => $user_id,
       'posts_per_page' => $per_page,
       'paged' => $page,
@@ -379,14 +417,7 @@ class Vendor_Events_API {
           'start_ts' => (int) ($entry['start_ts'] ?? 0),
         ];
       }, $dates);
-      $out[] = [
-        'id' => (int) $id,
-        'title' => get_the_title($id),
-        'type' => get_post_type($id),
-        'thumbnail' => (string) get_the_post_thumbnail_url($id, 'medium'),
-        'dates_count' => count($dates),
-        'dates' => $dates,
-      ];
+      $out[] = self::format_event((int) $id, $dates);
     }
 
     if (!$with_totals) {
@@ -398,5 +429,58 @@ class Vendor_Events_API {
       'total' => (int) $q->found_posts,
       'total_pages' => (int) $q->max_num_pages,
     ];
+  }
+
+  private static function format_event(int $event_id, ?array $dates = null): array {
+    $post = get_post($event_id);
+    if (!$post) {
+      return [];
+    }
+
+    if ($dates === null) {
+      $dates = WC_Cart::get_event_date_options($event_id);
+      $dates = array_map(function ($entry) {
+        return [
+          'schedule_id' => (int) ($entry['schedule_id'] ?? 0),
+          'label' => (string) ($entry['label'] ?? ''),
+          'date' => (string) ($entry['date'] ?? ''),
+          'time' => (string) ($entry['time'] ?? ''),
+          'start_ts' => (int) ($entry['start_ts'] ?? 0),
+        ];
+      }, $dates);
+    }
+
+    return [
+      'id' => $event_id,
+      'title' => get_the_title($event_id),
+      'type' => get_post_type($event_id),
+      'status' => (string) $post->post_status,
+      'modified' => mysql_to_rfc3339($post->post_modified_gmt ?: $post->post_modified),
+      'thumbnail' => (string) get_the_post_thumbnail_url($event_id, 'medium'),
+      'managed_ticket_types' => self::count_ticket_types($event_id),
+      'dates_count' => count($dates),
+      'dates' => $dates,
+    ];
+  }
+
+  private static function count_ticket_types(int $event_id): int {
+    if (!$event_id) {
+      return 0;
+    }
+
+    $query = new \WP_Query([
+      'post_type' => Ticket_Types_CPT::POST_TYPE,
+      'post_status' => ['publish', 'draft', 'pending', 'private'],
+      'fields' => 'ids',
+      'posts_per_page' => 1,
+      'no_found_rows' => false,
+      'meta_query' => [[
+        'key' => Ticket_Types_API::META_EVENT_ID,
+        'value' => $event_id,
+        'compare' => '=',
+      ]],
+    ]);
+
+    return (int) $query->found_posts;
   }
 }

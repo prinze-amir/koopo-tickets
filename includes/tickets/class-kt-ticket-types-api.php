@@ -19,6 +19,7 @@ class Ticket_Types_API {
   const META_MAX_PER_ORDER = '_koopo_ticket_max_per_order';
   const META_DATE_PRICES = '_koopo_ticket_date_prices';
   const META_UNLIMITED_CAPACITY = '_koopo_ticket_unlimited_capacity';
+  const META_IMAGE_ID = '_koopo_ticket_image_id';
 
   public static function init() {
     add_action('rest_api_init', [__CLASS__, 'routes']);
@@ -104,11 +105,17 @@ class Ticket_Types_API {
     $sales_end = sanitize_text_field((string) $req->get_param('sales_end'));
     $sku = sanitize_text_field((string) $req->get_param('sku'));
     $max_per_order = $req->get_param('max_per_order');
+    $image_id = $req->get_param('image_id');
 
     if (!$title) return new \WP_REST_Response(['error' => 'title is required'], 400);
 
     [$ok, $event_or_resp] = self::assert_event_access($event_id, $user_id);
     if (!$ok) return $event_or_resp;
+
+    $product_capacity = Author_Sync::validate_event_ticket_product_capacity($event_id);
+    if (is_wp_error($product_capacity)) {
+      return new \WP_REST_Response(['error' => $product_capacity->get_error_message()], 400);
+    }
 
     $validation = self::validate_meta([
       'price' => $price,
@@ -124,11 +131,13 @@ class Ticket_Types_API {
     ]);
     if ($validation) return $validation;
 
+    $event_author_id = (int) $event_or_resp->post_author;
+
     $ticket_type_id = wp_insert_post([
       'post_type' => Ticket_Types_CPT::POST_TYPE,
       'post_status' => 'publish',
       'post_title' => $title,
-      'post_author' => $user_id,
+      'post_author' => $event_author_id ?: $user_id,
     ], true);
 
     if (is_wp_error($ticket_type_id)) {
@@ -148,9 +157,11 @@ class Ticket_Types_API {
       'sku' => $sku,
       'max_per_order' => $max_per_order,
       'date_prices' => $req->get_param('date_prices'),
+      'image_id' => $image_id,
     ]);
 
     WC_Ticket_Product::create_or_update_for_ticket_type($ticket_type_id);
+    Author_Sync::sync_event_author($event_id);
 
     return new \WP_REST_Response(self::format_ticket_type($ticket_type_id), 201);
   }
@@ -170,6 +181,16 @@ class Ticket_Types_API {
       $event_id = absint($event_id);
       [$ok_event, $event_or_resp] = self::assert_event_access($event_id, get_current_user_id());
       if (!$ok_event) return $event_or_resp;
+      $product_capacity = Author_Sync::validate_event_ticket_product_capacity($event_id);
+      if (is_wp_error($product_capacity)) {
+        return new \WP_REST_Response(['error' => $product_capacity->get_error_message()], 400);
+      }
+      if (!empty($event_or_resp->post_author)) {
+        wp_update_post([
+          'ID' => $ticket_type_id,
+          'post_author' => (int) $event_or_resp->post_author,
+        ]);
+      }
     }
 
     $validation = self::validate_meta([
@@ -199,9 +220,14 @@ class Ticket_Types_API {
       'sku' => $req->get_param('sku'),
       'max_per_order' => $req->get_param('max_per_order'),
       'date_prices' => $req->get_param('date_prices'),
+      'image_id' => $req->get_param('image_id'),
     ]);
 
     WC_Ticket_Product::create_or_update_for_ticket_type($ticket_type_id);
+    $sync_event_id = $event_id ?: (int) get_post_meta($ticket_type_id, self::META_EVENT_ID, true);
+    if ($sync_event_id) {
+      Author_Sync::sync_event_author($sync_event_id);
+    }
 
     return new \WP_REST_Response(self::format_ticket_type($ticket_type_id), 200);
   }
@@ -419,10 +445,19 @@ class Ticket_Types_API {
         delete_post_meta($ticket_type_id, self::META_DATE_PRICES);
       }
     }
+    if (array_key_exists('image_id', $payload) && $payload['image_id'] !== null) {
+      $image_id = absint($payload['image_id']);
+      if ($image_id) {
+        update_post_meta($ticket_type_id, self::META_IMAGE_ID, $image_id);
+      } else {
+        delete_post_meta($ticket_type_id, self::META_IMAGE_ID);
+      }
+    }
   }
 
   private static function format_ticket_type(int $ticket_type_id): array {
     $event_id = (int) get_post_meta($ticket_type_id, self::META_EVENT_ID, true);
+    $image_id = (int) get_post_meta($ticket_type_id, self::META_IMAGE_ID, true);
     return [
       'id' => $ticket_type_id,
       'title' => get_the_title($ticket_type_id),
@@ -439,6 +474,8 @@ class Ticket_Types_API {
       'max_per_order' => (int) get_post_meta($ticket_type_id, self::META_MAX_PER_ORDER, true),
       'date_prices' => get_post_meta($ticket_type_id, self::META_DATE_PRICES, true),
       'unlimited_capacity' => (int) get_post_meta($ticket_type_id, self::META_UNLIMITED_CAPACITY, true),
+      'image_id' => $image_id,
+      'image_url' => $image_id ? wp_get_attachment_image_url($image_id, 'medium') : '',
       'product_id' => (int) get_post_meta($ticket_type_id, self::META_PRODUCT_ID, true),
       'variation_id' => (int) get_post_meta($ticket_type_id, self::META_VARIATION_ID, true),
       'author' => (int) get_post_field('post_author', $ticket_type_id),

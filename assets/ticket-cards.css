@@ -21,6 +21,14 @@ body.koopo-ticket--modal-open {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
 }
 
+.koopo-ticket-card__image {
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background-position: center;
+  background-size: cover;
+  margin: -4px -4px 12px;
+}
+
 .koopo-ticket-card h4 {
   margin: 0 0 8px;
   font-size: 16px;
@@ -209,6 +217,18 @@ body.koopo-ticket--modal-open {
   grid-template-columns: 1fr 120px;
   gap: 10px;
   align-items: center;
+}
+
+.koopo-ticket__item-image {
+  width: 72px;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background-position: center;
+  background-size: cover;
+}
+
+.koopo-ticket__item.has-image {
+  grid-template-columns: 72px 1fr 120px;
 }
 
 .koopo-ticket__item h5 {

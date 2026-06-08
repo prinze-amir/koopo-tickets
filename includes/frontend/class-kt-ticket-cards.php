@@ -77,6 +77,7 @@ class Ticket_Cards {
       $attributes = $variation->get_attributes();
       $ticket_name = $attributes[$attribute_name] ?? $variation->get_name();
       $stock_qty = $variation->get_stock_quantity();
+      $image_id = (int) $variation->get_image_id();
 
       $options[] = [
         'variation_id' => (int) $variation_id,
@@ -86,6 +87,7 @@ class Ticket_Cards {
         'price_html' => $variation->get_price_html(),
         'stock_qty' => $stock_qty,
         'in_stock' => $variation->is_in_stock(),
+        'image_url' => $image_id ? wp_get_attachment_image_url($image_id, 'medium') : '',
         'max_per_order' => $ticket_type_id ? (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_MAX_PER_ORDER, true) : 0,
         'date_prices' => $ticket_type_id ? get_post_meta($ticket_type_id, Ticket_Types_API::META_DATE_PRICES, true) : [],
       ];
@@ -102,15 +104,18 @@ class Ticket_Cards {
       if (!$option['in_stock']) $classes[] = 'is-soldout';
       $max_text = $option['max_per_order'] ? sprintf(__('Max %d per order', 'koopo-tickets'), $option['max_per_order']) : __('No limit', 'koopo-tickets');
       $soldout = !$option['in_stock'] ? '<span class="koopo-ticket-soldout">' . esc_html__('Sold Out', 'koopo-tickets') . '</span>' : '';
+      $image = !empty($option['image_url']) ? '<div class="koopo-ticket-card__image" style="background-image:url(' . esc_url($option['image_url']) . ')"></div>' : '';
 
       $cards[] = sprintf(
         '<div class="%s">' .
+          '%s' .
           '<h4>%s %s</h4>' .
           '<p class="koopo-ticket-price">%s</p>' .
           '<p class="koopo-ticket-meta">%s</p>' .
           '<p class="koopo-ticket-meta">%s</p>' .
         '</div>',
         esc_attr(implode(' ', $classes)),
+        $image,
         esc_html($option['name']),
         $soldout,
         $option['price_html'] ?: esc_html__('Free', 'koopo-tickets'),
@@ -135,8 +140,11 @@ class Ticket_Cards {
       $date_prices = is_array($option['date_prices'] ?? null) ? $option['date_prices'] : [];
       $price_map = esc_attr(wp_json_encode($date_prices ?: new \stdClass()));
       $soldout = !$option['in_stock'] ? '<span class="koopo-ticket-soldout">' . esc_html__('Sold Out', 'koopo-tickets') . '</span>' : '';
+      $image = !empty($option['image_url']) ? '<div class="koopo-ticket__item-image" style="background-image:url(' . esc_url($option['image_url']) . ')"></div>' : '';
+      $item_class = !empty($option['image_url']) ? 'koopo-ticket__item has-image' : 'koopo-ticket__item';
       $ticket_items .= sprintf(
-        '<div class="koopo-ticket__item" data-variation-id="%d" data-ticket-type-id="%d" data-name="%s" data-price="%s" data-price-base="%s" data-price-map="%s" %s>' .
+        '<div class="%s" data-variation-id="%d" data-ticket-type-id="%d" data-name="%s" data-price="%s" data-price-base="%s" data-price-map="%s" %s>' .
+          '%s' .
           '<div>' .
             '<h5>%s</h5>' .
             '<div class="koopo-ticket-meta" data-price-label>%s</div>' .
@@ -146,6 +154,7 @@ class Ticket_Cards {
             '<input type="number" min="0" value="0" %s>' .
           '</div>' .
         '</div>',
+        esc_attr($item_class),
         (int) $option['variation_id'],
         (int) $option['ticket_type_id'],
         esc_attr($option['name']),
@@ -153,6 +162,7 @@ class Ticket_Cards {
         esc_attr($option['price']),
         $price_map,
         $max_attr,
+        $image,
         esc_html($option['name']),
         $option['price_html'] ?: esc_html__('Free', 'koopo-tickets'),
         $soldout,

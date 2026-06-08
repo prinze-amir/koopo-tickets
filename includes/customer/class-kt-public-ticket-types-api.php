@@ -104,6 +104,7 @@ class Public_Ticket_Types_API {
     $sales_end = (string) get_post_meta($ticket_type_id, Ticket_Types_API::META_SALES_END, true);
     $date_prices = get_post_meta($ticket_type_id, Ticket_Types_API::META_DATE_PRICES, true);
     $product_id = (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_PRODUCT_ID, true);
+    $image_id = (int) get_post_meta($ticket_type_id, Ticket_Types_API::META_IMAGE_ID, true);
 
     $sold_count = self::get_sold_count($ticket_type_id);
     $remaining_capacity = $unlimited_capacity ? null : max(0, $capacity - $sold_count);
@@ -125,6 +126,8 @@ class Public_Ticket_Types_API {
       'sales_start' => $sales_start,
       'sales_end' => $sales_end,
       'date_prices' => is_array($date_prices) ? $date_prices : [],
+      'image_id' => $image_id,
+      'image_url' => $image_id ? wp_get_attachment_image_url($image_id, 'medium') : '',
       'product_id' => $product_id,
       'author' => (int) get_post_field('post_author', $ticket_type_id),
       'status' => $status ?: 'active',

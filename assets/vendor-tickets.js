@@ -12,6 +12,7 @@
   var currentCalendar = { year: 0, month: 0, selectedDateKey: '' };
   var currentStep = 1;
   var totalSteps = 2;
+  var eventSearchTimer = null;
   var analyticsPalette = ['#1f5fbf', '#ff8c00', '#2d9d78', '#6d4cce', '#d93f6f', '#f4b400', '#0097a7', '#7b8a8b', '#e65100', '#3949ab'];
   var eventsState = {
     items: Array.isArray(api.events) ? api.events : [],
@@ -199,6 +200,11 @@
   }
 
   function loadAnalytics() {
+    if (api.disable_analytics) {
+      renderAnalytics(null);
+      return;
+    }
+
     request('vendor/ticket-analytics', 'GET')
       .done(function (stats) {
         renderAnalytics(stats || {});
@@ -383,7 +389,18 @@
 
   function loadEvents(page) {
     eventsState.currentPage = page || 1;
-    request('vendor/events?page=' + encodeURIComponent(eventsState.currentPage) + '&per_page=' + encodeURIComponent(eventsState.perPage), 'GET')
+    var endpoint = api.events_endpoint || 'vendor/events';
+    var search = $('#koopo-event-filter-search').val() || '';
+    var query = [
+      'page=' + encodeURIComponent(eventsState.currentPage),
+      'per_page=' + encodeURIComponent(eventsState.perPage)
+    ];
+
+    if (search) {
+      query.push('search=' + encodeURIComponent(search));
+    }
+
+    request(endpoint + '?' + query.join('&'), 'GET')
       .done(function (items, _textStatus, xhr) {
         eventsState.items = items || [];
         eventsState.currentPage = parseInt(xhr.getResponseHeader('X-WP-Page'), 10) || eventsState.currentPage;
@@ -694,6 +711,59 @@
     $('body').removeClass('koopo-ticket-modal-open');
   }
 
+  function setTicketImage(imageId, imageUrl) {
+    $('#koopo-ticket-image-id').val(imageId ? String(imageId) : '');
+    var $preview = $('#koopo-ticket-image-preview');
+    if (!$preview.length) return;
+
+    if (imageUrl) {
+      $preview.css('background-image', 'url("' + imageUrl + '")').addClass('has-image');
+    } else {
+      $preview.css('background-image', '').removeClass('has-image');
+    }
+  }
+
+  function bindTicketImagePicker() {
+    var frame = null;
+
+    $('#koopo-ticket-image-select').on('click', function (e) {
+      e.preventDefault();
+
+      if (!window.wp || !wp.media) {
+        showNotice('error', 'Media library is not available.');
+        return;
+      }
+
+      if (frame) {
+        frame.open();
+        return;
+      }
+
+      frame = wp.media({
+        title: 'Select Ticket Image',
+        button: { text: 'Use this image' },
+        multiple: false,
+        library: { type: 'image' }
+      });
+
+      frame.on('select', function () {
+        var attachment = frame.state().get('selection').first();
+        if (!attachment) return;
+
+        var data = attachment.toJSON();
+        var url = data.sizes && data.sizes.medium ? data.sizes.medium.url : data.url;
+        setTicketImage(data.id || 0, url || '');
+      });
+
+      frame.open();
+    });
+
+    $('#koopo-ticket-image-remove').on('click', function (e) {
+      e.preventDefault();
+      setTicketImage(0, '');
+    });
+  }
+
   function resetTicketForm() {
     var form = $('#koopo-ticket-create')[0];
     if (form) form.reset();
@@ -702,6 +772,7 @@
     $('#koopo-ticket-event').val(selectedEventId ? String(selectedEventId) : '');
     $('#koopo-ticket-submit').text('Create Ticket Type');
     $('#koopo-ticket-modal-title').text('Create Ticket Type');
+    setTicketImage(0, '');
 
     $('#koopo-ticket-unlimited').prop('checked', false);
     $('#koopo-ticket-capacity').prop('disabled', false).val('100');
@@ -745,7 +816,8 @@
         sales_start: $('#koopo-ticket-sales-start').val(),
         sales_end: $('#koopo-ticket-sales-end').val(),
         sku: $('#koopo-ticket-sku').val(),
-        max_per_order: parseInt($('#koopo-ticket-max').val(), 10) || 0
+        max_per_order: parseInt($('#koopo-ticket-max').val(), 10) || 0,
+        image_id: parseInt($('#koopo-ticket-image-id').val(), 10) || 0
       };
 
       var datePrices = collectDatePrices();
@@ -825,6 +897,7 @@
         $('#koopo-ticket-sales-mode').val(item.sales_mode || 'event_start');
         $('#koopo-ticket-sku').val(item.sku || '');
         $('#koopo-ticket-max').val(item.max_per_order || '');
+        setTicketImage(item.image_id || 0, item.image_url || '');
 
         currentDatePrices = item.date_prices || {};
         renderDatePrices(item.event_id || selectedEventId, currentDatePrices);
@@ -844,6 +917,18 @@
     });
     $('#koopo-ticket-filter-status, #koopo-ticket-filter-visibility').on('change', function () {
       loadTickets(1);
+    });
+
+    $('#koopo-event-filter-search').on('input', function () {
+      window.clearTimeout(eventSearchTimer);
+      eventSearchTimer = window.setTimeout(function () {
+        selectedEventId = 0;
+        selectedEvent = null;
+        $('#koopo-ticket-workspace').hide();
+        loadEvents(1);
+        renderRows([]);
+        syncMobileEventMode();
+      }, 250);
     });
   }
 
@@ -929,6 +1014,7 @@
     bindEdit();
     bindFilters();
     bindModal();
+    bindTicketImagePicker();
     bindEventSelection();
     bindPagination();
 
