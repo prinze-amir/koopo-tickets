@@ -179,6 +179,21 @@ class Vendor_Events_API {
       WHERE {$base_where}";
     $tickets_sold = (int) $wpdb->get_var($wpdb->prepare($sold_count_sql, $where_args));
 
+    $event_ticket_count_sql = "SELECT t.event_id, COUNT(1) AS tickets_sold
+      FROM {$tickets_table} t
+      INNER JOIN {$wpdb->posts} tt ON tt.ID = t.ticket_type_id
+      {$orders_join_sql}
+      WHERE {$base_where}
+      GROUP BY t.event_id";
+    $event_ticket_rows = $wpdb->get_results($wpdb->prepare($event_ticket_count_sql, $where_args), ARRAY_A);
+    $event_ticket_counts = [];
+    foreach ($event_ticket_rows as $row) {
+      $event_key = absint($row['event_id'] ?? 0);
+      if ($event_key > 0) {
+        $event_ticket_counts[$event_key] = max(0, (int) ($row['tickets_sold'] ?? 0));
+      }
+    }
+
     $item_totals_sql = "SELECT ti.event_id, ti.order_id, ti.order_item_id,
         MAX(CASE WHEN oim.meta_key = '_line_total' THEN oim.meta_value END) AS line_total,
         MAX(CASE WHEN oim.meta_key = '_line_tax' THEN oim.meta_value END) AS line_tax
@@ -354,9 +369,19 @@ class Vendor_Events_API {
     }
 
     arsort($event_gross);
+    $event_keys = array_values(array_unique(array_merge(array_keys($event_gross), array_keys($event_ticket_counts))));
+    usort($event_keys, static function ($left, $right) use ($event_gross, $event_ticket_counts) {
+      $gross_compare = ((float) ($event_gross[$right] ?? 0)) <=> ((float) ($event_gross[$left] ?? 0));
+      if ($gross_compare !== 0) {
+        return $gross_compare;
+      }
+      return ((int) ($event_ticket_counts[$right] ?? 0)) <=> ((int) ($event_ticket_counts[$left] ?? 0));
+    });
     $event_breakdown = [];
-    foreach ($event_gross as $event_key => $event_gross_sales) {
-      if ($event_gross_sales <= 0) {
+    foreach ($event_keys as $event_key) {
+      $event_gross_sales = (float) ($event_gross[$event_key] ?? 0);
+      $event_tickets_sold = (int) ($event_ticket_counts[$event_key] ?? 0);
+      if ($event_gross_sales <= 0 && $event_tickets_sold <= 0) {
         continue;
       }
       $event_fee_total = (float) ($event_commission_fees[$event_key] ?? 0) + (float) ($event_stripe_fees[$event_key] ?? 0);
@@ -367,6 +392,7 @@ class Vendor_Events_API {
       $event_breakdown[] = [
         'event_id' => (int) $event_key,
         'event_title' => (string) get_the_title((int) $event_key),
+        'tickets_sold' => $event_tickets_sold,
         'gross_sales' => round((float) $event_gross_sales, 2),
         'net_sales' => round((float) $event_net_sales, 2),
       ];
@@ -458,6 +484,8 @@ class Vendor_Events_API {
       'modified' => mysql_to_rfc3339($post->post_modified_gmt ?: $post->post_modified),
       'thumbnail' => (string) get_the_post_thumbnail_url($event_id, 'medium'),
       'managed_ticket_types' => self::count_ticket_types($event_id),
+      'going_count' => self::count_rsvp_users($event_id, 'event_rsvp_yes'),
+      'interested_count' => self::count_rsvp_users($event_id, 'event_rsvp_maybe'),
       'dates_count' => count($dates),
       'dates' => $dates,
     ];
@@ -482,5 +510,30 @@ class Vendor_Events_API {
     ]);
 
     return (int) $query->found_posts;
+  }
+
+  private static function count_rsvp_users(int $event_id, string $meta_key): int {
+    $values = get_post_meta($event_id, $meta_key, true);
+    if (!is_array($values)) {
+      return 0;
+    }
+
+    $user_ids = [];
+    $collect = null;
+    $collect = static function ($value) use (&$collect, &$user_ids): void {
+      if (is_array($value)) {
+        foreach ($value as $nested_value) {
+          $collect($nested_value);
+        }
+        return;
+      }
+
+      if (is_numeric($value) && (int) $value > 0) {
+        $user_ids[(int) $value] = true;
+      }
+    };
+    $collect($values);
+
+    return count($user_ids);
   }
 }

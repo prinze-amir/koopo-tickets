@@ -5,6 +5,8 @@ namespace Koopo_Tickets;
 defined('ABSPATH') || exit;
 
 class Ticket_Instances {
+  const MANAGED_EMAIL_BRIDGE = true;
+
   public static function init(): void {
     add_action('woocommerce_order_status_completed', [__CLASS__, 'issue_tickets_for_order']);
     add_action('woocommerce_order_status_changed', [__CLASS__, 'handle_order_status_changed'], 10, 4);
@@ -79,6 +81,8 @@ class Ticket_Instances {
         wc_delete_order_item_meta($item_id, '_koopo_tickets_issuing');
       }
     }
+    // Consumers must verify paid status and complete issuance before notifying.
+    do_action('koopo_tickets_issued_for_order', $order_id);
   }
 
   public static function handle_order_status_changed(int $order_id, string $from_status, string $to_status, 
@@ -95,6 +99,7 @@ class Ticket_Instances {
       }
       self::restore_order_ticket_states($fresh_order);
       self::sync_order_rsvp($fresh_order);
+      do_action('koopo_tickets_issued_for_order', $order_id);
       return;
     }
 

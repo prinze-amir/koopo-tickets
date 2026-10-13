@@ -20,7 +20,7 @@ class Dokan_Dashboard {
   }
 
   public static function add_nav_items($urls) {
-    if (!Access::vendor_can_manage_tickets(get_current_user_id())) return $urls;
+    if (!Access::is_admin_bypass() && (!function_exists('dokan_is_user_seller') || !dokan_is_user_seller(get_current_user_id()))) return $urls;
 
     $urls['tickets'] = [
       'title' => __('Tickets', 'koopo-tickets'),
@@ -37,7 +37,7 @@ class Dokan_Dashboard {
     if (!is_array($query_vars)) return;
 
     if (isset($query_vars['koopo-tickets'])) {
-      self::load('tickets.php');
+      self::load(Access::vendor_can_manage_tickets() ? 'tickets.php' : 'upgrade.php');
       return;
     }
   }
@@ -54,6 +54,9 @@ class Dokan_Dashboard {
     global $wp_query;
     $is_koopo = isset($wp_query->query_vars['koopo-tickets']);
     if (!$is_koopo) return;
+
+    wp_enqueue_style('koopo-tickets-upgrade', KOOPO_TICKETS_URL . 'assets/upgrade.css', [], filemtime(KOOPO_TICKETS_PATH . 'assets/upgrade.css'));
+    if (!Access::vendor_can_manage_tickets()) return;
 
     if (function_exists('wp_enqueue_media')) {
       wp_enqueue_media();
